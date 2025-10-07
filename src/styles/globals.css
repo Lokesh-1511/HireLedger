@@ -1,5 +1,7 @@
 /* Legacy global aggregator (restored). */
 @import './index.css';
+/* New design system layer (tokens already loaded via index -> modules) */
+@import './design-system.css';
 .job-status-badge { --badge-color: var(--accent-500); background: var(--badge-color); color: #fff; font-size: .55rem; text-transform: uppercase; letter-spacing: .7px; padding: .3rem .55rem; border-radius: .45rem; font-weight: 700; display: inline-flex; align-items: center; gap: .25rem; box-shadow: 0 2px 6px -2px rgba(0,0,0,.4); }
 
 /* Dropdown */

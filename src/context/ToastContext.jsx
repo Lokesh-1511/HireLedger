@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useState, useRef, useEffect } from 'react';
+import * as React from 'react';
+const { createContext, useCallback, useContext, useState, useRef, useEffect } = React;
 
 /*
   Toast System (Client-side only placeholder)
@@ -12,6 +13,20 @@ const ToastCtx = createContext(null);
 let idSeq = 0;
 
 export function ToastProvider({ children }) {
+  // Runtime React integrity diagnostics (safe / dev-oriented)
+  if (import.meta.env.DEV) {
+    if (!React || !React.useState) {
+      // eslint-disable-next-line no-console
+      console.error('[ToastProvider] React hook dispatcher missing – possible duplicate React bundle.');
+    } else if (typeof window !== 'undefined') {
+      const existing = window.__HL_REACT_SINGLETON__;
+      if (existing && existing !== React) {
+        // eslint-disable-next-line no-console
+        console.warn('[HireLedger] Multiple React instances detected (ToastContext). This can cause invalid hook calls.');
+      }
+      window.__HL_REACT_SINGLETON__ = React;
+    }
+  }
   const [toasts, setToasts] = useState([]);
   const timeouts = useRef(new Map());
 

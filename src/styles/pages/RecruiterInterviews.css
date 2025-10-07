@@ -131,6 +131,36 @@
 	box-shadow:inset 0 1px 2px rgba(15,23,42,0.08);
 }
 
+/* Month view calendar */
+.month-grid {
+	display:flex;
+	flex-direction:column;
+	gap:.65rem;
+	padding:1.1rem 1rem 1.4rem;
+	border-radius:var(--radius-xl);
+	background:var(--color-surface);
+	border:1px solid color-mix(in srgb,var(--color-border) 70%, transparent);
+	box-shadow:0 28px 60px -42px rgba(15,23,42,0.32);
+}
+.month-grid .month-head { display:grid; grid-template-columns:repeat(7,1fr); gap:.35rem; font-size:.7rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--color-text-muted); }
+.month-grid .mh-cell { text-align:center; padding:.4rem .25rem; }
+.month-grid .month-body { display:grid; grid-template-columns:repeat(7,1fr); gap:.45rem; }
+.month-grid .m-cell { position:relative; min-height:92px; background:linear-gradient(145deg,rgba(59,130,246,0.12),rgba(59,130,246,0.04)); border:1px solid color-mix(in srgb,var(--color-primary) 35%, var(--color-border)); border-radius:18px; padding:.55rem .55rem .6rem; display:flex; flex-direction:column; gap:.35rem; font-size:.68rem; line-height:1.15; overflow:hidden; transition:box-shadow var(--transition-fast), transform var(--transition-fast), background var(--transition-fast); }
+.month-grid .m-cell.empty { background:color-mix(in srgb,var(--color-surface) 92%, rgba(15,23,42,0.03)); border:1px dashed color-mix(in srgb,var(--color-border) 70%, transparent); filter:grayscale(.6) opacity(.7); }
+.month-grid .m-cell.has-items { box-shadow:0 18px 38px -26px rgba(59,130,246,0.45); }
+.month-grid .m-cell:hover { transform:translateY(-3px); box-shadow:0 22px 46px -28px rgba(59,130,246,0.55); }
+.month-grid .m-cell-date { font-size:.72rem; font-weight:700; color:var(--color-heading); }
+.month-grid .m-cell-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.25rem; }
+.month-grid .m-pill { background:rgba(15,23,42,0.72); color:#fff; padding:.25rem .45rem; border-radius:10px; font-size:.62rem; font-weight:600; text-overflow:ellipsis; white-space:nowrap; overflow:hidden; border:1px solid rgba(255,255,255,0.14); }
+.month-grid .m-more { font-size:.6rem; font-weight:600; color:var(--color-primary); }
+@media (max-width:900px){
+	.month-grid .m-cell { min-height:78px; }
+}
+@media (max-width:640px){
+	.month-grid { padding:.9rem .8rem 1.1rem; }
+	.month-grid .m-cell { min-height:66px; }
+}
+
 .recruiter-message-modal { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:2.5rem 1.5rem; background:rgba(15,23,42,0.58); backdrop-filter:blur(8px); z-index:120; }
 .recruiter-message-dialog {
 	width:min(520px,100%);

@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import '../styles/pages/RecruiterApplicants.css';
+import { useRecruiterData } from '../context/RecruiterDataContext.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 
 /*
   RecruiterApplicants
@@ -11,22 +13,17 @@ import '../styles/pages/RecruiterApplicants.css';
   TODO(MESSAGING): Integrate rich text editor library (e.g., TipTap, Quill) and send endpoint.
 */
 
-const APPLICANTS = Array.from({ length: 34 }).map((_, i) => ({
-  id: 'a' + (i+1),
-  name: 'Applicant ' + (i+1),
-  college: ['Stanford','MIT','IIT Delhi','CMU','UCLA'][i % 5],
-  location: ['NY','SF','Remote','Austin','Seattle'][i % 5],
-  skills: ['React','SQL','Node','Python','Figma'].slice(0, (i % 5) + 1),
-  status: ['Screening','Interview','Offer','Rejected'][i % 4]
-}));
-
 const PAGE_SIZE = 8;
 
 const SKILL_FILTERS = ['React','Node','SQL','Python','Figma'];
 const COLLEGES = ['Stanford','MIT','IIT Delhi','CMU','UCLA'];
 const LOCATIONS = ['NY','SF','Remote','Austin','Seattle'];
 
+const STATUSES = ['Screening','Interview','Offer','Rejected','Hired'];
+
 export default function RecruiterApplicants() {
+  const { applicants, updateApplicantStatus, bulkMessage } = useRecruiterData();
+  const { push } = useToast();
   const [page, setPage] = useState(1);
   const [skill, setSkill] = useState('');
   const [college, setCollege] = useState('');
@@ -34,15 +31,16 @@ export default function RecruiterApplicants() {
   const [selected, setSelected] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [message, setMessage] = useState('<p>Hello candidates,</p><p>We will reach out shortly.</p>');
+  const [statusEdit, setStatusEdit] = useState(null); // applicant id currently editing status
 
   const filtered = useMemo(() => {
-    return APPLICANTS.filter(a => {
+    return applicants.filter(a => {
       if (skill && !a.skills.includes(skill)) return false;
       if (college && a.college !== college) return false;
       if (location && a.location !== location) return false;
       return true;
     });
-  }, [skill, college, location]);
+  }, [applicants, skill, college, location]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pageItems = filtered.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
@@ -59,9 +57,16 @@ export default function RecruiterApplicants() {
 
   function openBulk() { if (selected.length) setShowModal(true); }
   function sendBulk() {
-    // TODO(API): POST /messages bulk send
-    alert('Mock send to ' + selected.length + ' applicants');
+    bulkMessage(selected, message);
+    push('Message queued for ' + selected.length + ' applicants.', { type: 'success' });
     setShowModal(false);
+  }
+
+  function beginStatusEdit(id) { setStatusEdit(id); }
+  function changeStatus(id, newStatus) {
+    updateApplicantStatus(id, newStatus);
+    push('Status updated to ' + newStatus, { type: 'info' });
+    setStatusEdit(null);
   }
 
   return (
@@ -117,7 +122,21 @@ export default function RecruiterApplicants() {
                 <td>{a.college}</td>
                 <td>{a.location}</td>
                 <td>{a.skills.join(', ')}</td>
-                <td>{a.status}</td>
+                <td>
+                  {statusEdit === a.id ? (
+                    <select
+                      autoFocus
+                      value={a.status}
+                      onChange={e=>changeStatus(a.id, e.target.value)}
+                      onBlur={()=>setStatusEdit(null)}
+                      style={{ fontSize: '.65rem' }}
+                    >
+                      {STATUSES.map(s=> <option key={s}>{s}</option>)}
+                    </select>
+                  ) : (
+                    <button className="btn-ghost" style={{ fontSize: '.65rem', padding: '.25rem .45rem' }} onClick={()=>beginStatusEdit(a.id)}>{a.status}</button>
+                  )}
+                </td>
               </tr>
             ))}
             {pageItems.length === 0 && (

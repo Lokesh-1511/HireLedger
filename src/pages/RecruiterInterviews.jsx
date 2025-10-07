@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import '../styles/pages/RecruiterInterviews.css';
+import { useRecruiterData } from '../context/RecruiterDataContext.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 
 /*
   RecruiterInterviews
@@ -13,35 +15,79 @@ import '../styles/pages/RecruiterInterviews.css';
   TODO(REALTIME): Subscribe to updates via WebSocket for collaborative scheduling.
 */
 
-const MOCK_INTERVIEWS = [
-  { id: 'i1', title: 'Frontend Screen', day: 2, start: '10:00', end: '10:45', candidate: 'Applicant 5' },
-  { id: 'i2', title: 'Data Round', day: 3, start: '14:00', end: '15:00', candidate: 'Applicant 11' },
-  { id: 'i3', title: 'HR Intro', day: 4, start: '09:30', end: '10:00', candidate: 'Applicant 2' }
-];
-
 const DAYS = ['Mon','Tue','Wed','Thu','Fri'];
 
 export default function RecruiterInterviews() {
-  const [view, setView] = useState('week'); // 'week' | 'month' (month = placeholder grid)
-  const [slots, setSlots] = useState(MOCK_INTERVIEWS);
+  const [view, setView] = useState('week'); // 'week' | 'month'
+  const { interviews, scheduleInterview, updateInterview } = useRecruiterData();
   const [draggingId, setDraggingId] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [newSlot, setNewSlot] = useState({ title: '', candidate: '', day: 1, start: '09:00', end: '09:30' });
+  const { push } = useToast();
 
   function onDragStart(id) { setDraggingId(id); }
   function onDragEnd(day) {
     if (!draggingId) return;
-    setSlots(s => s.map(sl => sl.id === draggingId ? { ...sl, day } : sl));
+    updateInterview(draggingId, { day });
+    push('Interview moved.', { type: 'info' });
     setDraggingId(null);
   }
 
   function createSlot(e) {
     e.preventDefault();
-    const id = 'i' + (slots.length + 1);
-    setSlots(s => [...s, { id, ...newSlot }]);
+    // In month view allow user to enter explicit date (ISO) by reusing day field if it matches pattern YYYY-MM-DD
+    const slot = { ...newSlot };
+    if (view === 'month' && /\d{4}-\d{2}-\d{2}/.test(newSlot.day)) {
+      slot.date = newSlot.day; // overloaded day input acts as date string
+      // derive weekday number (Mon=1) for consistency if needed
+      const dObj = new Date(newSlot.day + 'T00:00:00');
+      const weekday = dObj.getDay(); // 0 Sun
+      slot.day = ((weekday + 6) % 7) + 1; // convert to 1..7 with Mon=1 (Fri=5 etc.) still stored limited to 1..7
+    }
+    scheduleInterview(slot);
+    push('Interview scheduled.', { type: 'success' });
     setShowModal(false);
-    // TODO(API): POST /interviews
   }
+
+  // Month view calculations
+  const monthModel = useMemo(() => {
+    if (view !== 'month') return null;
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const first = new Date(year, month, 1);
+    const last = new Date(year, month + 1, 0);
+    const daysInMonth = last.getDate();
+    const startWeekday = first.getDay(); // 0 Sun
+    const cells = [];
+    // Leading blanks
+    for (let i = 0; i < startWeekday; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+    // Pad to complete weeks (multiples of 7)
+    while (cells.length % 7 !== 0) cells.push(null);
+    // Aggregate interviews by date (using interview.date; fallback approximate using weekday distribution)
+    const byDate = new Map();
+    interviews.forEach(iv => {
+      if (iv.date) {
+        byDate.set(iv.date, [...(byDate.get(iv.date) || []), iv]);
+      } else {
+        // Fallback: map to nearest upcoming day this month
+        const targetWeekday = iv.day || 1; // 1..7 Mon..Sun (approx stored) but our week uses 0..6 Sun..Sat
+        // Find first date in month whose getDay matches conversion back
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dateObj = new Date(year, month, d);
+            const calWd = dateObj.getDay();
+            const monBased = ((calWd + 6) % 7) + 1; // convert to 1..7 Mon=1
+            if (monBased === targetWeekday) {
+              const iso = dateObj.toISOString().slice(0,10);
+              byDate.set(iso, [...(byDate.get(iso) || []), iv]);
+              break;
+            }
+        }
+      }
+    });
+    return { cells, year, month, byDate };
+  }, [view, interviews]);
 
   return (
     <div className="recruiter-interviews-grid">
@@ -64,7 +110,7 @@ export default function RecruiterInterviews() {
             {DAYS.map((d,i) => <div key={d} role="columnheader" className="day-head" onDragOver={e=>e.preventDefault()} onDrop={()=>onDragEnd(i+1)}>{d}</div>)}
           </div>
           <div className="recruiter-calendar-grid">
-            {slots.map(slot => (
+            {interviews.map(slot => (
               <div
                 key={slot.id}
                 className={"recruiter-calendar-day" + (draggingId===slot.id ? ' dragging' : '')}
@@ -95,9 +141,32 @@ export default function RecruiterInterviews() {
         </div>
       )}
 
-      {view === 'month' && (
-        <div className="month-placeholder surface">
-          <p className="muted small">Month view placeholder. TODO: Implement grid of days & aggregated interviews.</p>
+      {view === 'month' && monthModel && (
+        <div className="month-grid surface" aria-label="Month schedule" role="grid">
+          <div className="month-head" role="row">
+            {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => <div key={d} className="mh-cell" role="columnheader">{d}</div>)}
+          </div>
+          <div className="month-body">
+            {monthModel.cells.map((dateObj, idx) => {
+              if (!dateObj) return <div key={idx} className="m-cell empty" role="gridcell" aria-disabled="true" />;
+              const iso = dateObj.toISOString().slice(0,10);
+              const day = dateObj.getDate();
+              const dayInterviews = monthModel.byDate.get(iso) || [];
+              return (
+                <div key={iso} className={"m-cell" + (dayInterviews.length ? ' has-items' : '')} role="gridcell" aria-label={`Day ${day} with ${dayInterviews.length} interviews`}>
+                  <div className="m-cell-date">{day}</div>
+                  {dayInterviews.length > 0 && (
+                    <ul className="m-cell-list">
+                      {dayInterviews.slice(0,3).map(iv => (
+                        <li key={iv.id} className="m-pill" title={iv.candidate}>{iv.title}</li>
+                      ))}
+                      {dayInterviews.length > 3 && <li className="m-more">+{dayInterviews.length - 3} more</li>}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -115,9 +184,16 @@ export default function RecruiterInterviews() {
               <label className="field">Candidate
                 <input required value={newSlot.candidate} onChange={e=>setNewSlot(s=>({...s,candidate:e.target.value}))} />
               </label>
-              <label className="field">Day
-                <select value={newSlot.day} onChange={e=>setNewSlot(s=>({...s,day:Number(e.target.value)}))}>{DAYS.map((d,i)=><option key={d} value={i+1}>{d}</option>)}</select>
-              </label>
+              {view === 'week' && (
+                <label className="field">Day
+                  <select value={newSlot.day} onChange={e=>setNewSlot(s=>({...s,day:Number(e.target.value)}))}>{DAYS.map((d,i)=><option key={d} value={i+1}>{d}</option>)}</select>
+                </label>
+              )}
+              {view === 'month' && (
+                <label className="field">Date
+                  <input type="date" value={/\d{4}-\d{2}-\d{2}/.test(newSlot.day)? newSlot.day : ''} onChange={e=>setNewSlot(s=>({...s,day:e.target.value}))} required />
+                </label>
+              )}
               <div className="row gap-sm">
                 <label className="field grow">Start
                   <input type="time" value={newSlot.start} onChange={e=>setNewSlot(s=>({...s,start:e.target.value}))} />

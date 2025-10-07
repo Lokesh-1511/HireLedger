@@ -48,7 +48,16 @@ const QUESTION_BANK = {
   ]
 };
 
-const STORAGE_KEY = 'hl_assessment_topic_stats_v1';
+// Role -> topics mapping (first topics more weighted for role relevance)
+const ROLE_TOPIC_MAP = {
+  'Frontend Engineer': ['JavaScript Fundamentals', 'CSS', 'Web Protocols'],
+  'Backend Engineer': ['Algorithms', 'Databases', 'Web Protocols', 'JavaScript Fundamentals'],
+  'Full Stack Engineer': ['JavaScript Fundamentals', 'CSS', 'Web Protocols', 'Algorithms', 'Databases'],
+  'Data Analyst': ['Databases', 'Algorithms', 'JavaScript Fundamentals'],
+  'DevOps Engineer': ['Algorithms', 'Databases', 'Web Protocols'],
+};
+
+const STORAGE_KEY = 'hl_assessment_role_stats_v1';
 
 function loadStats() {
   if (typeof window === 'undefined') return {};
@@ -58,8 +67,8 @@ function persistStats(stats) {
   if (typeof window === 'undefined') return; try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stats)); } catch { /* ignore */ }
 }
 
-/* Stats model per topic:
-  stats[topic] = {
+/* Stats model per role:
+  stats[role] = {
     attempts: number,
     bestScorePct: number,
     fastestTimeSec: number | null,
@@ -93,16 +102,16 @@ function RadialScore({ scorePct }) {
 }
 
 export default function SkillAssessment() {
-  const topics = Object.keys(QUESTION_BANK);
-  const [topic, setTopic] = useState(null); // selected topic
-  const [questions, setQuestions] = useState([]); // active topic questions
+  const roles = Object.keys(ROLE_TOPIC_MAP);
+  const [role, setRole] = useState(null); // selected role
+  const [questions, setQuestions] = useState([]); // active role questions
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [startedAt, setStartedAt] = useState(null); // Date.now when test begins
   const [endedAt, setEndedAt] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [stats, setStats] = useState(() => loadStats());
-  const testActive = topic && startedAt && !submitted;
+  const testActive = role && startedAt && !submitted;
   const testFinished = submitted;
 
   const elapsedSec = useMemo(() => {
@@ -130,10 +139,18 @@ export default function SkillAssessment() {
   // Persist stats whenever updated
   useEffect(() => { persistStats(stats); }, [stats]);
 
-  function beginTopic(selected, numQuestions) {
-    const bank = QUESTION_BANK[selected] || [];
-    const slice = bank.slice(0, Math.max(1, Math.min(numQuestions, bank.length)));
-    setTopic(selected);
+  function buildRoleQuestionPool(selectedRole, numQuestions) {
+    const relatedTopics = ROLE_TOPIC_MAP[selectedRole] || [];
+    // Aggregate questions from all mapped topics
+    const aggregated = relatedTopics.flatMap(t => QUESTION_BANK[t] || []);
+    // Simple random shuffle
+    const shuffled = [...aggregated].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, Math.max(1, Math.min(numQuestions, shuffled.length)));
+  }
+
+  function beginRole(selectedRole, numQuestions) {
+    const slice = buildRoleQuestionPool(selectedRole, numQuestions);
+    setRole(selectedRole);
     setQuestions(slice);
     setIndex(0);
     setAnswers({});
@@ -154,8 +171,8 @@ export default function SkillAssessment() {
     setEndedAt(Date.now());
     // compute + store stats
     setStats(prev => {
-      if (!topic) return prev;
-      const info = { ...(prev[topic] || { attempts: 0, bestScorePct: 0, fastestTimeSec: null, lastScorePct: 0, lastTimeSec: 0, totalQuestionsAnswered: 0 }) };
+      if (!role) return prev;
+      const info = { ...(prev[role] || { attempts: 0, bestScorePct: 0, fastestTimeSec: null, lastScorePct: 0, lastTimeSec: 0, totalQuestionsAnswered: 0 }) };
       let correct = 0; questions.forEach(q => { if (answers[q.id] === q.answer) correct++; });
       const pct = Math.round((correct / questions.length) * 100);
       const timeSec = Math.max(1, elapsedSec);
@@ -165,31 +182,31 @@ export default function SkillAssessment() {
       info.totalQuestionsAnswered += questions.length;
       if (pct > info.bestScorePct) info.bestScorePct = pct;
       if (info.fastestTimeSec == null || timeSec < info.fastestTimeSec) info.fastestTimeSec = timeSec;
-      return { ...prev, [topic]: info };
+      return { ...prev, [role]: info };
     });
   }
 
   function resetFlow() {
-    setTopic(null); setQuestions([]); setIndex(0); setAnswers({}); setStartedAt(null); setEndedAt(null); setSubmitted(false);
+    setRole(null); setQuestions([]); setIndex(0); setAnswers({}); setStartedAt(null); setEndedAt(null); setSubmitted(false);
   }
 
-  // Derived chosen topic stats
-  const topicStats = topic ? stats[topic] : null;
+  // Derived chosen role stats
+  const roleStats = role ? stats[role] : null;
 
-  if (!topic) {
-    // Topic selection screen
+  if (!role) {
+    // Role selection screen
     return (
       <div className="assessment-page">
         <div className="question-card" style={{ gap: '1.75rem' }}>
-          <h2>Select a Topic</h2>
+          <h2>Select a Role</h2>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: '1rem' }}>
-            {topics.map(t => {
-              const st = stats[t];
+            {roles.map(r => {
+              const st = stats[r];
               return (
-                <li key={t} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '1rem 1.25rem', background: 'var(--color-surface-muted, #fff)' }}>
+                <li key={r} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '1rem 1.25rem', background: 'var(--color-surface-muted, #fff)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '.35rem' }}>
-                      <strong>{t}</strong>
+                      <strong>{r}</strong>
                       {st ? (
                         <span className="muted" style={{ fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.3px' }}>
                           Best {st.bestScorePct}% · Fastest {st.fastestTimeSec ? st.fastestTimeSec + 's' : '—'} · Attempts {st.attempts}
@@ -198,7 +215,7 @@ export default function SkillAssessment() {
                         <span className="muted" style={{ fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.3px' }}>No attempts yet</span>
                       )}
                     </div>
-                    <TopicStartForm topic={t} onStart={beginTopic} />
+                    <RoleStartForm role={r} onStart={beginRole} />
                   </div>
                 </li>
               );
@@ -214,15 +231,15 @@ export default function SkillAssessment() {
       <div className="assessment-page">
         <div className="result-wrap">
           <div className="result-card">
-            <h2>{topic} Result</h2>
+            <h2>{role} Result</h2>
             <div className="result-top">
               <RadialScore scorePct={scoreInfo.pct} />
               <div className="result-stats">
                 <p><strong>{scoreInfo.correct}</strong> / {questions.length} correct</p>
                 <p>Percentile: <strong>{scoreInfo.percentile}</strong></p>
                 <p>Time: {elapsedSec}s</p>
-                {topicStats && (
-                  <p className="muted" style={{ fontSize: '.7rem' }}>Best {topicStats.bestScorePct}% · Fastest {topicStats.fastestTimeSec || '—'}s · Attempts {topicStats.attempts}</p>
+                {roleStats && (
+                  <p className="muted" style={{ fontSize: '.7rem' }}>Best {roleStats.bestScorePct}% · Fastest {roleStats.fastestTimeSec || '—'}s · Attempts {roleStats.attempts}</p>
                 )}
               </div>
             </div>
@@ -233,8 +250,8 @@ export default function SkillAssessment() {
               </ul>
             </div>
             <div className="actions-row">
-              <button onClick={() => beginTopic(topic, questions.length)} className="btn-primary">Retake Topic</button>
-              <button onClick={resetFlow} className="btn-ghost">Choose Another Topic</button>
+              <button onClick={() => beginRole(role, questions.length)} className="btn-primary">Retake Role Quiz</button>
+              <button onClick={resetFlow} className="btn-ghost">Choose Another Role</button>
             </div>
           </div>
         </div>
@@ -243,7 +260,7 @@ export default function SkillAssessment() {
   }
 
   if (!testActive) {
-    // Topic chosen but not started (should not occur because start sets startedAt)
+    // Role chosen but not started (should not occur because start sets startedAt)
     return null;
   }
 
@@ -256,7 +273,7 @@ export default function SkillAssessment() {
       <header className="assessment-head">
         <div className="timer" role="status" aria-live="polite">⏱ {minutes}:{secs.toString().padStart(2,'0')}</div>
         <ProgressBar current={index + (answeredCurrent ? 1 : 0)} total={questions.length} />
-        <div className="question-meta">{topic} · Question {index + 1} / {questions.length}</div>
+        <div className="question-meta">{role} · Question {index + 1} / {questions.length}</div>
       </header>
 
       <main className="question-card" aria-labelledby="qprompt">
@@ -289,11 +306,11 @@ export default function SkillAssessment() {
   );
 }
 
-function TopicStartForm({ topic, onStart }) {
-  const [count, setCount] = useState(3);
-  const options = [3,5];
+function RoleStartForm({ role, onStart }) {
+  const [count, setCount] = useState(5);
+  const options = [3,5,8,10];
   return (
-    <form onSubmit={(e)=>{ e.preventDefault(); onStart(topic, count); }} style={{ display:'flex', gap:'.5rem', alignItems:'center', flexWrap:'wrap' }}>
+    <form onSubmit={(e)=>{ e.preventDefault(); onStart(role, count); }} style={{ display:'flex', gap:'.5rem', alignItems:'center', flexWrap:'wrap' }}>
       <label style={{ fontSize:'.7rem', textTransform:'uppercase', letterSpacing:'.35px', fontWeight:600 }}>Questions
         <select value={count} onChange={e=>setCount(Number(e.target.value))} style={{ marginLeft:'.4rem' }}>
           {options.map(o=> <option key={o} value={o}>{o}</option>)}

@@ -1,5 +1,7 @@
 import React from 'react';
 import '../styles/pages/RecruiterAnalytics.css';
+import { useRecruiterData } from '../context/RecruiterDataContext.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 
 /*
   RecruiterAnalytics
@@ -11,27 +13,8 @@ import '../styles/pages/RecruiterAnalytics.css';
   TODO(BLOCKCHAIN): Real verification status fetched from chain or attestation service.
 */
 
-const JOB_PERF = [
-  { job: 'Frontend Intern', applications: 56 },
-  { job: 'Data Analyst', applications: 42 },
-  { job: 'Mobile Dev', applications: 28 },
-  { job: 'Full Stack', applications: 64 },
-  { job: 'Product Intern', applications: 31 }
-];
-
-const DIVERSITY = [
-  { label: 'Women', value: 38, color: '#6366f1' },
-  { label: 'Men', value: 52, color: '#22c55e' },
-  { label: 'Non-binary', value: 6, color: '#f59e0b' },
-  { label: 'Not disclosed', value: 4, color: '#64748b' }
-];
-
-const VERIFICATIONS = [
-  { id: 'a5', applicant: 'Applicant 5', credential: 'SQL Mastery', status: 'On-chain', hash: '0xabc...13f' },
-  { id: 'a11', applicant: 'Applicant 11', credential: 'DSA Badge', status: 'Pending', hash: null },
-  { id: 'a2', applicant: 'Applicant 2', credential: 'Frontend Cert', status: 'On-chain', hash: '0x98e...aa2' },
-  { id: 'a9', applicant: 'Applicant 9', credential: 'Security Fundamentals', status: 'Failed', hash: null }
-];
+// Color palette for diversity slices
+const DIVERSITY_COLORS = ['#6366f1','#22c55e','#f59e0b','#64748b','#0ea5e9'];
 
 function BarChart({ data, width=480, height=180 }) {
   const max = Math.max(...data.map(d=>d.applications));
@@ -86,22 +69,38 @@ function StatusBadge({ status }) {
 }
 
 export default function RecruiterAnalytics() {
+  const { applicationsPerJob, diversityBreakdown, verifications, requestVerification, markVerification } = useRecruiterData();
+  const { push } = useToast();
+
+  // Decorate diversity with colors
+  const diversityData = diversityBreakdown.map((d,i)=> ({ ...d, color: DIVERSITY_COLORS[i % DIVERSITY_COLORS.length] }));
+
+  function handleRequest(applicantId) {
+    const credential = 'General Credential';
+    requestVerification(applicantId, credential);
+    push('Verification requested.', { type: 'info' });
+  }
+  function handleVerify(verificationId) {
+    const fakeHash = '0x' + Math.random().toString(16).slice(2,10) + '...' + Math.random().toString(16).slice(2,6);
+    markVerification(verificationId, fakeHash);
+    push('Marked as on-chain.', { type: 'success' });
+  }
   return (
     <div className="recruiter-analytics-layout">
       <header className="surface analytics-head">
         <h1>Analytics</h1>
-        <p className="muted small">Static visualisation of performance & verification.</p>
+        <p className="muted small">Derived from local recruiter data context.</p>
       </header>
       <section className="recruiter-analytics-grid">
         <div className="chart-block">
           <h2 className="chart-title">Applications per Job</h2>
-          <BarChart data={JOB_PERF} />
+          <BarChart data={applicationsPerJob} />
         </div>
         <div className="chart-block">
           <h2 className="chart-title">Diversity Mix</h2>
-          <PieChart data={DIVERSITY} />
+          <PieChart data={diversityData} />
           <ul className="legend" aria-label="Diversity legend">
-            {DIVERSITY.map(d => (
+            {diversityData.map(d => (
               <li key={d.label}><span className="swatch" style={{ background: d.color }} /> {d.label} ({d.value}%)</li>
             ))}
           </ul>
@@ -121,17 +120,24 @@ export default function RecruiterAnalytics() {
             </tr>
           </thead>
           <tbody>
-            {VERIFICATIONS.map(v => (
+            {verifications.map(v => (
               <tr key={v.id}>
                 <td>{v.applicant}</td>
                 <td>{v.credential}</td>
                 <td><StatusBadge status={v.status} /></td>
                 <td>{v.hash || '—'}</td>
                 <td>
-                  {v.hash ? (
-                    <button className="btn-ghost" onClick={()=>alert('TODO: open explorer '+v.hash)}>Verify</button>
-                  ) : (
-                    <button className="btn-secondary" onClick={()=>alert('TODO: trigger chain attestation')}>Request</button>
+                  {v.status === 'Pending' && (
+                    <button className="btn-secondary" onClick={()=>handleVerify(v.id)}>Mark Verified</button>
+                  )}
+                  {v.status === 'Failed' && (
+                    <button className="btn-secondary" onClick={()=>handleRequest(v.applicantId)}>Re-request</button>
+                  )}
+                  {v.status === 'On-chain' && v.hash && (
+                    <button className="btn-ghost" onClick={()=>push('Explorer open (mock): '+v.hash, { type: 'info' })}>View</button>
+                  )}
+                  {!v.hash && v.status !== 'Pending' && v.status !== 'Failed' && (
+                    <button className="btn-secondary" onClick={()=>handleRequest(v.applicantId)}>Request</button>
                   )}
                 </td>
               </tr>

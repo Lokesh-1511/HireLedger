@@ -1,5 +1,6 @@
 import React from 'react';
 import '../styles/pages/RecruiterDashboard.css';
+import { useRecruiterData } from '../context/RecruiterDataContext.jsx';
 
 /*
   RecruiterDashboard
@@ -9,26 +10,26 @@ import '../styles/pages/RecruiterDashboard.css';
   TODO(ANALYTICS): Track interaction (view filters, date range selection, exports).
 */
 
-const metrics = [
-  { key: 'activeJobs', label: 'Active Jobs', value: 7, delta: '+2 this week' },
-  { key: 'applicants', label: 'Applicants', value: 142, delta: '+18' },
-  { key: 'conversion', label: 'Interview Rate', value: '32%', delta: '+4%' },
-  { key: 'offers', label: 'Offers Extended', value: 12, delta: '+3' }
-];
-
 export default function RecruiterDashboard() {
+  const { metrics } = useRecruiterData();
+  const cards = [
+    { key: 'activeJobs', label: 'Active Jobs', value: metrics.activeJobs, delta: '' },
+    { key: 'applicants', label: 'Applicants', value: metrics.applicants, delta: '' },
+    { key: 'conversion', label: 'Interview Rate', value: metrics.interviewRate + '%', delta: '' },
+    { key: 'offers', label: 'Offers / Hires', value: metrics.offers, delta: '' }
+  ];
   return (
     <div className="recruiter-dashboard">
       <header className="surface dash-head">
         <h1>Recruiter Dashboard</h1>
-        <p className="muted small">High-level overview (static mock data)</p>
+        <p className="muted small">Live metrics (local mock context)</p>
       </header>
       <section className="recruiter-dashboard-grid" aria-label="Key performance indicators">
-        {metrics.map(m => (
+        {cards.map(m => (
           <div key={m.key} className="recruiter-kpi-card" role="group" aria-label={m.label}>
             <h3>{m.label}</h3>
             <div className="recruiter-kpi-metric">{m.value}</div>
-            <div className="recruiter-kpi-trend">{m.delta}</div>
+            {m.delta && <div className="recruiter-kpi-trend">{m.delta}</div>}
           </div>
         ))}
       </section>

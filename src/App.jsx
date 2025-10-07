@@ -15,6 +15,7 @@ import ProfileBuilder from './pages/ProfileBuilder.jsx';
 import StudentJobs from './pages/StudentJobs.jsx';
 import SkillAssessment from './pages/SkillAssessment.jsx';
 import CredentialViewer from './pages/CredentialViewer.jsx';
+import Profile from './pages/Profile.jsx';
 import RecruiterDashboard from './pages/RecruiterDashboard.jsx';
 import RecruiterJobPost from './pages/RecruiterJobPost.jsx';
 import RecruiterApplicants from './pages/RecruiterApplicants.jsx';
@@ -28,6 +29,8 @@ import { ToastProvider } from './context/ToastContext.jsx';
 import { SearchProvider } from './context/SearchContext.jsx';
 import { PWAEnhancements } from './components/pwa/PWAEnhancements.jsx';
 import { StudentDataProvider } from './context/StudentDataContext.jsx';
+import { RecruiterDataProvider } from './context/RecruiterDataContext.jsx';
+import { UserProfileProvider } from './context/UserProfileContext.jsx';
 
 function Splash() {
   return (
@@ -64,6 +67,7 @@ function AppShell() {
           <Route path="/student/jobs" element={<ProtectedRoute roles={['student']}><StudentJobs /></ProtectedRoute>} />
           <Route path="/student/assessments" element={<ProtectedRoute roles={['student']}><SkillAssessment /></ProtectedRoute>} />
           <Route path="/student/credentials" element={<ProtectedRoute roles={['student']}><CredentialViewer /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -76,10 +80,14 @@ export default function App() {
     <AuthProvider>
       <ToastProvider>
         <SearchProvider>
-          <StudentDataProvider>
-            <Splash />
-            <AppShell />
-          </StudentDataProvider>
+          <UserProfileProvider>
+            <StudentDataProvider>
+              <RecruiterDataProvider>
+                <Splash />
+                <AppShell />
+              </RecruiterDataProvider>
+            </StudentDataProvider>
+          </UserProfileProvider>
         </SearchProvider>
       </ToastProvider>
     </AuthProvider>

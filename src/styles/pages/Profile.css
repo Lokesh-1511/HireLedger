@@ -1,0 +1,31 @@
+.profile-page { display:flex; flex-direction:column; gap:2rem; padding:clamp(1.2rem,1.5vw,2rem); }
+.profile-hero { display:flex; gap:1.25rem; align-items:center; padding:1.6rem 1.8rem; border-radius:var(--radius-xl); background:var(--color-surface); box-shadow:0 24px 48px -32px rgba(15,23,42,.4); border:1px solid color-mix(in srgb,var(--color-border) 70%, transparent); }
+.avatar-circle { width:72px; height:72px; border-radius:50%; display:grid; place-items:center; font-size:2rem; font-weight:700; background:linear-gradient(150deg,var(--color-primary) 10%,var(--color-primary-accent,#2563eb) 90%); color:#fff; box-shadow:0 10px 30px -16px rgba(59,130,246,.6); }
+.hero-meta h1 { margin:.15rem 0 .35rem; font-size:clamp(1.6rem,1.2rem + .9vw,2.15rem); display:flex; align-items:center; gap:.65rem; }
+.role-badge { font-size:.65rem; letter-spacing:.15em; text-transform:uppercase; background:rgba(59,130,246,.18); color:var(--color-primary); padding:.4rem .65rem; border-radius:999px; font-weight:600; }
+.profile-grid { display:grid; gap:1.4rem; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); }
+.profile-section { display:flex; flex-direction:column; gap:.85rem; padding:1.1rem 1.25rem 1.3rem; border-radius:var(--radius-lg); background:linear-gradient(155deg,rgba(59,130,246,.08),rgba(59,130,246,.02)); border:1px solid color-mix(in srgb,var(--color-border) 70%, transparent); box-shadow:0 16px 40px -30px rgba(15,23,42,.35); }
+.profile-section .section-head { display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+.profile-section h2 { margin:0; font-size:1rem; letter-spacing:.02em; font-weight:600; }
+.kv-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:.55rem; font-size:.8rem; }
+.kv-list li { display:flex; justify-content:space-between; gap:1rem; }
+.pill-row { display:flex; flex-wrap:wrap; gap:.5rem; }
+.pill { background:rgba(15,23,42,.75); color:#fff; font-size:.65rem; padding:.45rem .7rem; border-radius:999px; font-weight:600; letter-spacing:.05em; box-shadow:0 6px 14px -8px rgba(15,23,42,.6); }
+.list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:.5rem; font-size:.75rem; }
+.list.compact li { line-height:1.25; }
+.badge { display:inline-block; background:rgba(59,130,246,.15); color:var(--color-primary); padding:.2rem .5rem; border-radius:8px; font-size:.6rem; font-weight:600; letter-spacing:.05em; }
+progress { width:90px; height:6px; border-radius:4px; overflow:hidden; background:rgba(15,23,42,.15); }
+progress::-webkit-progress-bar { background:transparent; }
+progress::-webkit-progress-value { background:linear-gradient(90deg,var(--color-primary),var(--color-primary-accent,#2563eb)); }
+/* --- New simplified identity profile layout --- */
+.profile-page.simple .profile-hero { background:var(--color-surface); }
+.profile-page.simple .profile-section { background:var(--color-surface-alt, var(--color-surface)); backdrop-filter:saturate(160%) blur(6px); }
+.pf-grid { display:grid; gap:1rem 1.4rem; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); margin-top:1.2rem; }
+.pf-field { display:flex; flex-direction:column; gap:.4rem; font-size:.75rem; letter-spacing:.02em; }
+.pf-field span { font-weight:600; text-transform:uppercase; font-size:.6rem; opacity:.75; }
+.pf-field input { border:1px solid color-mix(in srgb,var(--color-border) 70%, transparent); background:rgba(255,255,255,.04); padding:.55rem .7rem; border-radius:8px; color:inherit; font:inherit; outline:none; transition:.15s border, .15s background; }
+.pf-field input:focus { border-color:var(--color-primary); background:rgba(59,130,246,.08); box-shadow:0 0 0 3px rgba(59,130,246,.25); }
+.pf-field input:disabled { opacity:.55; cursor:not-allowed; }
+.profile-hero .btn.small { margin-top:.4rem; }
+@media (max-width:640px){ .pf-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); } }
+@media (max-width:720px){ .profile-grid { grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); } .avatar-circle { width:60px; height:60px; font-size:1.6rem; } .profile-hero { flex-direction:row; } }

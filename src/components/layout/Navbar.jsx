@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useSearch } from '../../context/SearchContext.jsx';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { Button } from '../ui/Button.jsx';
 import { Avatar } from '../ui/Avatar.jsx';
@@ -9,6 +9,7 @@ export function Navbar({ onToggleSidebar, isSidebarCollapsed, children, onToggle
   const location = useLocation();
   const hideNav = location.pathname.startsWith('/login');
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const search = useSearch();
 
@@ -53,7 +54,7 @@ export function Navbar({ onToggleSidebar, isSidebarCollapsed, children, onToggle
           </Button>
           {open && (
             <ul role="menu" className="profile-menu">
-              <li role="menuitem"><button className="btn ghost btn-sm menu-btn" onClick={() => { setOpen(false); }}>Profile (placeholder)</button></li>
+              <li role="menuitem"><button className="btn ghost btn-sm menu-btn" onClick={() => { setOpen(false); navigate('/profile'); }}>Profile</button></li>
               <li role="menuitem"><button className="btn danger btn-sm menu-btn" onClick={() => { setOpen(false); logout(); }}>Logout</button></li>
             </ul>
           )}

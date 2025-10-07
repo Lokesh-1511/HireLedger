@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import '../styles/pages/AuthToggle.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const roles = [ 'student', 'recruiter', 'admin' ];
 
 export default function AuthPage() {
-  const { login, user } = useAuth();
+  const { login, loginWithGoogle, user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname;
 
-  const [form, setForm] = useState({ email: '', password: '', role: 'student' });
+  const [form, setForm] = useState({ email: '', password: '', confirm: '', role: 'student' });
+  const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -19,6 +21,11 @@ export default function AuthPage() {
     if (!form.email.trim()) e.email = 'Email is required';
     if (!form.password.trim()) e.password = 'Password is required';
     if (!form.role) e.role = 'Role is required';
+    if (mode === 'register') {
+      if (!form.confirm.trim()) e.confirm = 'Confirm password is required';
+      if (!e.password && !e.confirm && form.password !== form.confirm) e.confirm = 'Passwords do not match';
+      if (form.password.length && form.password.length < 6) e.password = 'Min 6 characters';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -31,6 +38,7 @@ export default function AuthPage() {
     ev.preventDefault();
     if (!validate()) return;
     setSubmitting(true);
+    // For now register behaves same as login (placeholder for future create user logic)
     const res = login(form.email.trim(), form.password.trim(), form.role);
     setSubmitting(false);
     if (res.ok) {
@@ -74,8 +82,14 @@ export default function AuthPage() {
       </div>
       <div className="auth-side form">
         <form className="auth-card glass" onSubmit={handleSubmit} aria-describedby={errors.form ? 'form-error' : undefined} noValidate>
+          <div className="auth-mode-toggle" role="tablist" aria-label="Authentication mode">
+            <button type="button" role="tab" aria-selected={mode==='login'} className={mode==='login' ? 'seg-btn active' : 'seg-btn'} onClick={()=>setMode('login')}>Login</button>
+            <button type="button" role="tab" aria-selected={mode==='register'} className={mode==='register' ? 'seg-btn active' : 'seg-btn'} onClick={()=>setMode('register')}>Register</button>
+            <span className="seg-highlight" data-mode={mode} />
+          </div>
           <h2 className="auth-welcome">Welcome back</h2>
-          <p className="auth-desc">Sign in to continue to your role dashboard.</p>
+          <p className="auth-desc">{mode==='login' ? 'Sign in to continue to your role dashboard.' : 'Create your account to access dashboards.'}</p>
+          {loading && <div className="muted small" role="status">Checking session…</div>}
           {errors.form && <div id="form-error" role="alert" className="error-msg">{errors.form}</div>}
           <label className="field-group">
             <span>Email / Username</span>
@@ -101,6 +115,20 @@ export default function AuthPage() {
             />
             {errors.password && <small id="err-password" className="error-msg">{errors.password}</small>}
           </label>
+          {mode === 'register' && (
+            <label className="field-group">
+              <span>Confirm Password</span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={form.confirm}
+                onChange={handleChange('confirm')}
+                aria-invalid={!!errors.confirm}
+                aria-describedby={errors.confirm ? 'err-confirm' : undefined}
+              />
+              {errors.confirm && <small id="err-confirm" className="error-msg">{errors.confirm}</small>}
+            </label>
+          )}
           <label className="field-group">
             <span>Role</span>
             <select value={form.role} onChange={handleChange('role')} aria-invalid={!!errors.role} aria-describedby={errors.role ? 'err-role' : undefined}>
@@ -109,11 +137,19 @@ export default function AuthPage() {
             {errors.role && <small id="err-role" className="error-msg">{errors.role}</small>}
           </label>
           <div className="actions-row actions-tight">
-            <button type="submit" className="btn primary" disabled={submitting}>{submitting ? 'Logging in…' : 'Login'}</button>
-            <button type="button" className="link-btn" onClick={() => alert('Sign Up flow placeholder')}>Sign Up</button>
+            <button type="submit" className="btn primary" disabled={submitting}>{submitting ? (mode==='login' ? 'Logging in…' : 'Registering…') : (mode==='login' ? 'Login' : 'Register')}</button>
             <button type="button" className="link-btn" onClick={() => alert('Forgot Password placeholder')}>Forgot Password</button>
           </div>
-          <small className="muted demo-note">Demo auth only. Replace with real backend/OAuth.</small>
+          <div className="divider-row" aria-hidden="true"><span>or</span></div>
+          <button type="button" className="btn secondary full" onClick={async ()=>{
+            const res = await loginWithGoogle();
+            if(res.ok){
+              const target = `/dashboard/${user?.role || 'student'}`;
+              navigate(target, { replace:true });
+            } else if(res.error){ setErrors(prev=>({...prev, form: res.error })); }
+          }} disabled={loading}>
+            Continue with Google
+          </button>
         </form>
       </div>
     </div>

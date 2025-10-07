@@ -130,6 +130,40 @@ Implemented lightweight auth layer for prototyping:
 
 Replace with real identity provider (OAuth/OIDC, SSO, etc.) later; centralize tokens & refresh logic in context or a dedicated auth service module.
 
+### Firebase Google Authentication (Added 2025-10-07)
+Firebase client SDK integrated for Google sign-in while retaining fallback demo form login.
+
+Files:
+```
+src/firebase.js               # Initializes Firebase app + auth
+src/context/AuthContext.jsx   # Now wires Firebase auth state listener & popup login
+src/pages/AuthPage.jsx        # Adds "Continue with Google" button (popup flow)
+```
+
+Environment variables (see `.env.example`):
+```
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
+VITE_FIREBASE_MEASUREMENT_ID=...
+```
+If vars are absent, the provided demo config is used (not suitable for production).
+
+Auth flow details:
+1. User clicks Google button → `signInWithPopup`.
+2. `onAuthStateChanged` listener persists session to `localStorage` with default role `student` unless previously chosen in same tab.
+3. Logout invokes Firebase `signOut` and clears cache.
+
+Next recommended hardening:
+- Map Firebase custom claims → role instead of defaulting to `student`.
+- Add backend session / JWT exchange (optional) for server-side authorization.
+- Enforce allowed domains (e.g., campus email) before accepting session.
+- Implement incremental scopes if/when Drive / Storage access is required.
+
+
 ## Routing & Layout Notes
 - `/login` renders outside the main app layout (no sidebar/nav) for focus.
 - Root path `/` auto-redirects: authenticated → `/dashboard/:role`, otherwise `/login`.
@@ -220,4 +254,232 @@ import '../styles/pages/RecruiterDashboard.css';
 - Accessibility audit: axe-core run per page wrapper root.
 
 ---
+## Firestore Integration (2025-10-07)
+
+Initial Firestore data layer added with typed (JSDoc) model definitions and service helpers.
+
+### Files
+```
+src/firebase.js                     # Firebase app + auth
+src/services/firestoreModels.js     # JSDoc typedefs for all collections
+src/services/firestoreService.js    # CRUD + ensureUser + profile helpers
+src/services/firestoreSeed.js       # Dev-only in-app seed helper (window.__hireledgerSeed)
+scripts/seedFirestore.js            # Node/Esm script to populate mock data
+src/context/AuthContext.jsx         # Now invokes ensureUser on auth state
+```
+
+### Key Helpers (firestoreService.js)
+- ensureUser(firebaseUser)
+- getUser / updateUser
+- upsertStudentProfile / upsertRecruiterProfile / upsertAdminProfile
+- createJob / listJobs
+- createApplication / createInterview / createAssessment / createVerification
+- addNotification(uid, notification)
+- sendMessage
+- createInstitution
+- upsertAnalytics(metricId, data)
+
+All writes automatically set `createdAt` + `updatedAt` via `serverTimestamp()`; updates only adjust `updatedAt`.
+
+### Data Shape Intellisense
+Importing `firestoreModels.js` in an editor surface provides auto‑completion for object literals (VS Code picks up the JSDoc typedefs).
+
+### Seeding Data
+Two options:
+1. Node Script (preferred for initial bulk seed):
+	 - Ensure environment variables or fallback config exists in `src/firebase.js`.
+	 - Run (experimental) via a Node ESM context:
+		 ```bash
+		 node scripts/seedFirestore.js
+		 ```
+	 - Creates mock users (student/recruiter/admin), profiles, jobs, applications, assessment, verification, notification, message, institution, analytics metric.
+
+2. In-app (dev only):
+	 - Open browser console after starting `npm run dev`.
+	 - Call `window.__hireledgerSeed()` once.
+	 - Skips if `import.meta.env.PROD` is true.
+
+3. Extended Rich Dataset:
+	 - For multi-user scenario and relational links (multiple students, multiple jobs, applications, interview, notifications) run:
+		 ```bash
+		 node scripts/seedFirestoreExtended.js
+		 ```
+	 - Idempotent where practical (won't duplicate same title/company jobs or user docs).
+	 - Adds:
+		 - 4 student users + profiles
+		 - 2 recruiter users + profile
+		 - 1 admin user + profile
+		 - 3 jobs (active/draft mix)
+		 - Applications (each student applies to first two active jobs)
+		 - 1 interview scheduled for first application
+		 - Notifications for first two students
+	 - Safe to re-run; only new missing docs added (jobs matched by title & companyId, applications by jobId/studentId).
+
+All seeding scripts now import the single Firestore instance (`db`) exported from `src/firebase.js` to avoid creating multiple isolated SDK instances. If you change Firebase config, update it only in that file.
+
+### Companies & Auth User Creation (New)
+
+Additional scripts extend the dataset beyond basic documents:
+
+1. Companies Collection:
+	```bash
+	npm run seed:companies
+	```
+	- Creates/ensures company docs under `companies` (idempotent by `name`).
+	- Backfills recruiter profile sub-docs with a `companyId` reference so listings can join recruiter → company.
+	- Uses client SDK (sufficient for local dev). For production provisioning prefer Admin SDK.
+
+2. Auth Users (Firebase Authentication) with Deterministic Passwords:
+	```bash
+	# Requires a Firebase service account JSON (download from console) saved locally, e.g.: serviceAccount.json
+	node scripts/createAuthUsers.js serviceAccount.json
+	```
+	- Uses `firebase-admin` to create auth users for each seeded Firestore user UID.
+	- Skips creation if user already exists.
+	- Development password for ALL created accounts: `Password123!`
+	- Users created:
+	  - Students: stu-alice, stu-bob, stu-cara, stu-dan
+	  - Recruiters: rec-techcorp, rec-datadash
+	  - Admin: admin-super
+
+	Login Guidance:
+	- Email + password (above) if you implement email/password UI.
+	- Google popup auth flow will create a different firebase user (Google-managed UID). To test seeded accounts specifically, wire an email/password login form or use Firebase Auth Emulator.
+
+Security Note: Never use the dev password in production. Rotate and manage via Firebase Console or an admin provisioning pipeline.
+
+### Auth Flow Changes
+`AuthContext` now:
+1. On `signInWithPopup` → ensures user document (default role = student) then stores Firestore snapshot under `session.firestore`.
+2. On `onAuthStateChanged` → re‑ensures doc (refreshes lastLogin, timestamps) and merges locally stored role if previously changed.
+
+### Next Steps (Recommended)
+- Add Firestore Security Rules enforcing role-based access.
+- Introduce custom claims for role instead of local override (Cloud Functions or Admin SDK backend endpoint).
+- Replace local contexts (e.g., StudentDataContext) with real-time `onSnapshot` listeners progressively.
+- Implement offline persistence (enable IndexedDB cache via Firestore settings) if needed.
+- Add batch/transaction operations for multi-document state changes (e.g., application status + notification).
+
+### Example Usage
+```js
+import { createJob } from './services/firestoreService';
+
+async function postJob() {
+	const job = await createJob({
+		title: 'Backend Engineer',
+		description: 'Own microservice development',
+		companyId: currentUser.uid,
+		companyName: 'TechCorp',
+		location: 'Remote',
+		type: 'Full-Time',
+		status: 'active'
+	});
+	console.log('Created job', job);
+}
+```
+
+---
 Refactor completed: 2025-10-07.
+
+---
+
+## Backend API (Initial Node.js Scaffold 2025-10-07)
+
+An Express-based lightweight API has been added under `server/` to back the evolving frontend. Currently it uses an in-memory data seed (no external DB) mirroring the React contexts so the integration path is clear.
+
+### Tech Stack
+- Node.js + Express (ES Module syntax)
+- In-memory data store (`server/src/data/seed.js`)
+- Basic services per domain (jobs, applicants, interviews, verifications, assessments, auth)
+- Middleware: CORS, JSON body parsing, request logger, unified error + 404 handlers
+
+### Directory Outline
+```
+server/
+	package.json
+	src/
+		server.js          # Bootstraps HTTP server
+		app.js             # Express app composition
+		config/env.js      # dotenv + config wrapper
+		data/seed.js       # Initial data objects (acts as temp DB)
+		middleware/        # requestLogger, error handlers
+		services/          # Business logic & mutations
+		routes/            # REST routers mounted under /api/*
+```
+
+### Scripts
+Root (frontend):
+```
+npm run dev          # Frontend only (Vite)
+npm run dev:full     # Frontend + backend concurrently
+```
+Backend (inside `server/`):
+```
+npm run dev          # Nodemon watch mode
+npm start            # Plain node
+```
+
+### Environment
+Copy `.env.example` to `.env` inside `server/` to adjust `PORT` (default 4000).
+
+### Unified Response Shape
+Success: `{ "success": true, "data": <payload> }`
+Error: `{ "success": false, "error": "Message" }`
+
+### Endpoints Overview
+Base URL: `http://localhost:4000/api`
+
+| Domain | Method | Path | Description |
+| ------ | ------ | ---- | ----------- |
+| Health | GET | `/` (root) | API heartbeat ("HireLedger API OK") |
+| Auth | POST | `/auth/login` | Mock login (email/password) returns token + user |
+| Jobs | GET | `/jobs` | List jobs |
+| Jobs | POST | `/jobs` | Create job { title, company, location } |
+| Jobs | GET | `/jobs/:id` | Fetch single job |
+| Jobs | PATCH | `/jobs/:id` | Update partial fields |
+| Jobs | DELETE | `/jobs/:id` | Remove job |
+| Applicants | GET | `/applicants` | List applicants |
+| Applicants | POST | `/applicants` | Create applicant |
+| Applicants | PATCH | `/applicants/:id` | Update applicant status/data |
+| Applicants | DELETE | `/applicants/:id` | Delete applicant |
+| Applicants | POST | `/applicants/bulk-message` | Attach bulk message to applicants |
+| Interviews | GET | `/interviews` | List interviews |
+| Interviews | POST | `/interviews` | Create interview (title,candidate,day[,date]) |
+| Interviews | PATCH | `/interviews/:id` | Update interview slot |
+| Interviews | DELETE | `/interviews/:id` | Remove interview |
+| Verifications | GET | `/verifications` | List verification items |
+| Verifications | POST | `/verifications` | Request verification { name } |
+| Verifications | PATCH | `/verifications/:id` | Update status (default verified) |
+| Assessments | GET | `/assessments/roles` | List assessment roles |
+| Assessments | GET | `/assessments/roles/:role` | Get role stats |
+| Assessments | POST | `/assessments/roles/:role/attempts` | Record attempt { scorePct, elapsedSec } |
+
+### Sample cURL
+```
+curl http://localhost:4000/api/jobs
+curl -X POST http://localhost:4000/api/jobs -H "Content-Type: application/json" -d '{"title":"Data Analyst","company":"DataCorp"}'
+```
+
+### Integration Plan (Frontend → API)
+1. Replace context local mutations with `fetch` wrappers (introduce a lightweight API client module).
+2. Migrate persistence from `localStorage` to server responses; keep local cache for offline fallback.
+3. Introduce optimistic UI updates with rollback on failure.
+
+### Future Hardening
+- Replace in-memory seed with Postgres (Prisma) or Mongo + Mongoose schemas.
+- Proper auth (JWT/OAuth) + password hashing + refresh tokens.
+- Input validation (Zod or Joi) and request-level schema enforcement.
+- Rate limiting & helmet security headers.
+- Centralized logging (pino/winston) + request ID correlation.
+- Unit tests (Vitest / Jest) & integration tests (Supertest) for routes & services.
+- Dockerfile + docker-compose for API + DB.
+- Pagination & filtering queries (e.g., /jobs?status=open&page=1&limit=20).
+- WebSocket or SSE channel for real-time interview & verification updates.
+
+### Known Limitations (Current Scaffold)
+- All data resets on server restart.
+- No authentication guard middleware yet (public endpoints).
+- No concurrency control (race conditions possible under parallel calls).
+- No validation; malformed payloads could cause inconsistent entries.
+
+---

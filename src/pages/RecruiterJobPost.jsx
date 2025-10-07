@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import '../styles/pages/RecruiterJobPost.css';
+import { useRecruiterData } from '../context/RecruiterDataContext.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 
 /*
   RecruiterJobPost
@@ -12,16 +14,16 @@ import '../styles/pages/RecruiterJobPost.css';
 
 const INITIAL = {
   title: '',
-  department: '',
+  department: '', // stored inside meta later
   type: 'Full-time',
-  mode: 'On-site',
+  mode: 'On-site', // stored inside meta
   location: '',
-  salaryMin: '',
-  salaryMax: '',
-  currency: 'USD',
+  salaryMin: '', // form only
+  salaryMax: '', // form only
+  currency: 'USD', // meta
   description: '',
-  requirements: '',
-  skills: [],
+  requirements: '', // meta
+  skillsRequired: [],
   tagsInput: ''
 };
 
@@ -31,17 +33,19 @@ const MODES = ['On-site','Hybrid','Remote'];
 export default function RecruiterJobPost() {
   const [form, setForm] = useState(INITIAL);
   const [status, setStatus] = useState(null); // { type: 'success'|'error', msg: string }
+  const { addJob } = useRecruiterData();
+  const { push } = useToast();
 
   function update(key, value) { setForm(f => ({ ...f, [key]: value })); }
 
   function addSkill(e) {
     e.preventDefault();
     const skill = form.tagsInput.trim();
-    if (!skill || form.skills.includes(skill)) return;
-    update('skills', [...form.skills, skill]);
+    if (!skill || form.skillsRequired.includes(skill)) return;
+    update('skillsRequired', [...form.skillsRequired, skill]);
     update('tagsInput', '');
   }
-  function removeSkill(s) { update('skills', form.skills.filter(k => k !== s)); }
+  function removeSkill(s) { update('skillsRequired', form.skillsRequired.filter(k => k !== s)); }
 
   function submit(e) {
     e.preventDefault();
@@ -50,8 +54,24 @@ export default function RecruiterJobPost() {
       setStatus({ type: 'error', msg: 'Title and location required.' });
       return;
     }
-    // TODO(API): POST /jobs
-    setStatus({ type: 'success', msg: 'Job draft created (mock).' });
+    const salaryRange = form.salaryMin && form.salaryMax ? `${form.salaryMin}-${form.salaryMax}` : undefined;
+    const draft = {
+      title: form.title,
+      description: form.description,
+      type: form.type,
+      location: form.location,
+      skillsRequired: form.skillsRequired,
+      // extra meta fields preserved for future use
+      department: form.department || undefined,
+      mode: form.mode || undefined,
+      requirements: form.requirements || undefined,
+      currency: form.currency || undefined,
+      salaryRange,
+    };
+    addJob(draft);
+    setStatus({ type: 'success', msg: 'Job draft saved locally.' });
+    push('Job draft created: ' + form.title, { type: 'success' });
+    setForm(INITIAL);
   }
 
   return (
@@ -61,7 +81,7 @@ export default function RecruiterJobPost() {
         <p className="muted small">Fill required information to create a posting.</p>
       </header>
       <form onSubmit={submit} className="recruiter-jobpost-form" aria-describedby="jobFormHelp">
-        <div id="jobFormHelp" className="visually-hidden">All fields are mock only; no data is persisted.</div>
+  <div id="jobFormHelp" className="visually-hidden">Jobs persist locally in your browser until cleared.</div>
         <section className="recruiter-jobpost-section">
           <h2>Basics</h2>
           <div className="recruiter-field-grid">
@@ -110,8 +130,8 @@ export default function RecruiterJobPost() {
             <button onClick={addSkill} className="btn-secondary" type="button">Add</button>
           </form>
           <div className="skill-badges">
-            {form.skills.map(s => <span key={s} className="tag-removable" onClick={()=>removeSkill(s)}>{s} ✕</span>)}
-            {form.skills.length === 0 && <span className="muted small">No skills added yet.</span>}
+            {form.skillsRequired.map(s => <span key={s} className="tag-removable" onClick={()=>removeSkill(s)}>{s} ✕</span>)}
+            {form.skillsRequired.length === 0 && <span className="muted small">No skills added yet.</span>}
           </div>
         </section>
 

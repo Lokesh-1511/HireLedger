@@ -11,7 +11,7 @@ import { useRecruiterData } from '../context/RecruiterDataContext.jsx';
 */
 
 export default function RecruiterDashboard() {
-  const { metrics } = useRecruiterData();
+  const { metrics, loading, jobs, contextInfo } = useRecruiterData();
   const cards = [
     { key: 'activeJobs', label: 'Active Jobs', value: metrics.activeJobs, delta: '' },
     { key: 'applicants', label: 'Applicants', value: metrics.applicants, delta: '' },
@@ -22,7 +22,16 @@ export default function RecruiterDashboard() {
     <div className="recruiter-dashboard">
       <header className="surface dash-head">
         <h1>Recruiter Dashboard</h1>
-        <p className="muted small">Live metrics (local mock context)</p>
+        {loading && <p className="muted small">Loading recruiter data…</p>}
+        {!loading && jobs.length === 0 && (
+          <p className="muted small">
+            {contextInfo.mode === 'no-company-field' && 'No company assigned to your user record yet. Add a companyId to users/' }
+            {contextInfo.mode === 'derived-company' && 'No jobs found for this company yet. Create your first job.'}
+            {contextInfo.mode === 'meta-error' && 'Could not load company metadata.'}
+            {contextInfo.mode === 'anonymous' && 'Sign in to view recruiter metrics.'}
+            {contextInfo.mode === 'no-user-doc' && 'User document missing; ensureUser not called.'}
+          </p>
+        )}
       </header>
       <section className="recruiter-dashboard-grid" aria-label="Key performance indicators">
         {cards.map(m => (

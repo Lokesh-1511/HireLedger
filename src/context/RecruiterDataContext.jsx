@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { collection, onSnapshot, addDoc, serverTimestamp, query, where, updateDoc, doc, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, serverTimestamp, query, where, updateDoc, doc, getDocs, getDoc, limit } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { normalizeJob, JOB_STATUS } from '../utils/schemaConstants.js';
 import { useAuth } from './AuthContext.jsx';
@@ -16,35 +16,102 @@ export function RecruiterDataProvider({ children }) {
   const [interviews, setInterviews] = useState([]);
   const [verifications, setVerifications] = useState([]);
   const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [contextInfo, setContextInfo] = useState({ companyId: null, companyName: null, mode: 'unknown' }); // mode: derived-company | recruiter-fallback | all-fallback
+
+  // Derive company mapping from user doc (users/<uid>) if available
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMeta() {
+      if (!uid) { setContextInfo({ companyId: null, companyName: null, mode: 'anonymous' }); return; }
+      try {
+        const userRef = doc(db, 'users', uid);
+        const snap = await getDoc(userRef);
+        if (!snap.exists()) { setContextInfo(ci => ({ ...ci, mode: 'no-user-doc' })); return; }
+        const data = snap.data();
+        // Expect recruiter-specific fields (e.g., companyId, companyName). If absent we'll fallback.
+        if (data.companyId) {
+          setContextInfo({ companyId: data.companyId, companyName: data.companyName || data.displayName || 'Company', mode: 'derived-company' });
+        } else {
+          setContextInfo({ companyId: null, companyName: data.displayName || 'Recruiter', mode: 'no-company-field' });
+        }
+      } catch(e) {
+        console.warn('Recruiter context company meta load failed', e);
+        if (!cancelled) setContextInfo(ci => ({ ...ci, mode: 'meta-error' }));
+      }
+    }
+    loadMeta();
+    return () => { cancelled = true; };
+  }, [uid]);
 
   // Subscriptions
   useEffect(() => {
-    if (!uid) return;
-    const qJobs = query(collection(db, 'jobs'), where('companyId', '==', uid));
-    const unsubJobs = onSnapshot(qJobs, snap => setJobs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const qApps = query(collection(db, 'applications'), where('recruiterId', '==', uid));
-    const unsubApps = onSnapshot(qApps, snap => setApplications(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const qInts = query(collection(db, 'interviews'), where('recruiterId', '==', uid));
-    const unsubInts = onSnapshot(qInts, snap => setInterviews(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const qVer = query(collection(db, 'verifications'), where('verifiedBy', '==', uid));
-    const unsubVer = onSnapshot(qVer, snap => setVerifications(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const qMsg = query(collection(db, 'messages'), where('receiverId', '==', uid));
-    const unsubMsg = onSnapshot(qMsg, snap => setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    if (!uid) { setLoading(false); return; }
+    let unsubJobs = () => {};
+    let unsubApps = () => {};
+    let unsubInts = () => {};
+    let unsubVer = () => {};
+    let unsubMsg = () => {};
+    setLoading(true);
+    let currentMode = 'init';
+    function attachApps() {
+      unsubApps = onSnapshot(query(collection(db, 'applications'), where('recruiterId', '==', uid)), snap => setApplications(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      unsubInts = onSnapshot(query(collection(db, 'interviews'), where('recruiterId', '==', uid)), snap => setInterviews(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      unsubVer = onSnapshot(query(collection(db, 'verifications'), where('verifiedBy', '==', uid)), snap => setVerifications(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      unsubMsg = onSnapshot(query(collection(db, 'messages'), where('receiverId', '==', uid)), snap => setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    }
+    function log(mode, count) { console.info('[RecruiterDataContext] mode=', mode, 'jobs=', count); }
+    // Primary attempt
+    const tryPrimary = () => {
+      if (contextInfo.companyId) {
+        currentMode = 'companyId';
+        unsubJobs = onSnapshot(query(collection(db, 'jobs'), where('companyId', '==', contextInfo.companyId)), snap => {
+          const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setJobs(arr); log(currentMode, arr.length);
+          if (arr.length === 0) {
+            // fallback to uid-based
+            unsubJobs(); trySecondary();
+          } else { setLoading(false); }
+        });
+      } else {
+        trySecondary();
+      }
+    };
+    const trySecondary = () => {
+      currentMode = 'companyId==uid';
+      unsubJobs = onSnapshot(query(collection(db, 'jobs'), where('companyId', '==', uid)), snap => {
+        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setJobs(arr); log(currentMode, arr.length);
+        if (arr.length === 0) {
+            unsubJobs(); tryTertiary();
+        } else { setLoading(false); }
+      });
+    };
+    const tryTertiary = () => {
+      currentMode = 'allLimited';
+      unsubJobs = onSnapshot(query(collection(db, 'jobs'), limit(25)), snap => {
+        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setJobs(arr); log(currentMode, arr.length);
+        setLoading(false);
+      });
+    };
+    attachApps();
+    tryPrimary();
     return () => { unsubJobs(); unsubApps(); unsubInts(); unsubVer(); unsubMsg(); };
-  }, [uid]);
+  }, [uid, contextInfo.companyId]);
 
   // Actions
   const addJob = useCallback(async (jobDraft) => {
     if (!uid) return;
     await addDoc(collection(db, 'jobs'), {
       ...jobDraft,
-      companyId: uid,
-      companyName: user?.firestore?.displayName || 'Company',
+      companyId: contextInfo.companyId || uid,
+      companyName: contextInfo.companyName || user?.firestore?.displayName || 'Company',
       status: JOB_STATUS.DRAFT,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
-  }, [uid, user]);
+  }, [uid, user, contextInfo]);
 
   const updateApplicantStatus = useCallback(async (applicationId, status) => {
     await updateDoc(doc(db, 'applications', applicationId), { status, updatedAt: serverTimestamp() });
@@ -117,6 +184,8 @@ export function RecruiterDataProvider({ children }) {
     interviews,
     verifications: verificationsAug,
     messages,
+    loading,
+    contextInfo,
     metrics,
     applicationsPerJob,
     diversityBreakdown,

@@ -125,10 +125,10 @@ export default function RecruiterJobPost() {
 
         <section className="recruiter-jobpost-section">
           <h2>Skills / Tags</h2>
-          <form onSubmit={addSkill} className="inline-form" aria-label="Add skill tag">
+          <div className="inline-form" aria-label="Add skill tag">
             <input placeholder="Add a skill" value={form.tagsInput} onChange={e=>update('tagsInput', e.target.value)} />
             <button onClick={addSkill} className="btn-secondary" type="button">Add</button>
-          </form>
+          </div>
           <div className="skill-badges">
             {form.skillsRequired.map(s => <span key={s} className="tag-removable" onClick={()=>removeSkill(s)}>{s} ✕</span>)}
             {form.skillsRequired.length === 0 && <span className="muted small">No skills added yet.</span>}

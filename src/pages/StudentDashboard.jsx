@@ -1,44 +1,114 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import '../styles/pages/StudentDashboard.css';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useStudentData } from '../context/StudentDataContext.jsx';
+import { useToast } from '../context/ToastContext.jsx';
+
+function formatInterviewDate(value) {
+  if (!value) return 'TBD';
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    }).format(date);
+  } catch {
+    return value;
+  }
+}
 
 export default function StudentDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const {
+    jobs,
+    applications,
+    applicationStages,
+    interviews,
+    skills,
+    notifications,
+    profileCompletion,
+    refreshProfileCompletion,
+    applyToJob,
+    toggleSavedJob
+  } = useStudentData();
+  const { push } = useToast();
 
-  // Mock data
-  const profileCompletion = 68; // percent
-  const jobs = useMemo(()=>[
-    { id:1, company:'TechNova', logo:'🛰️', title:'Frontend Intern', salary:'$25/hr', tags:['React','UI','CSS'], location:'Remote' },
-    { id:2, company:'DataForge', logo:'📊', title:'Data Analyst Intern', salary:'$28/hr', tags:['SQL','Python','ETL'], location:'NYC' },
-    { id:3, company:'CloudSpan', logo:'☁️', title:'DevOps Trainee', salary:'$30/hr', tags:['AWS','Terraform','CI/CD'], location:'Remote' },
-    { id:4, company:'SecureStack', logo:'🔐', title:'Security Research Intern', salary:'$32/hr', tags:['AppSec','OWASP','SAST'], location:'Austin, TX' }
-  ],[]);
+  useEffect(() => {
+    refreshProfileCompletion();
+  }, [refreshProfileCompletion]);
 
-  const applications = [
-    { id:1, job:'Frontend Intern', company:'TechNova', stage:'Interview', stages:['Applied','Screen','Interview','Offer'] },
-    { id:2, job:'Data Analyst Intern', company:'DataForge', stage:'Screen', stages:['Applied','Screen','Interview','Offer'] },
-    { id:3, job:'DevOps Trainee', company:'CloudSpan', stage:'Applied', stages:['Applied','Screen','Interview','Offer'] }
-  ];
+  const recommendedJobs = useMemo(() => {
+    const sorted = jobs
+      .filter(job => job.status !== 'rejected')
+      .sort((a, b) => {
+        if (!!a.saved === !!b.saved) {
+          const aTime = a.updatedAt || 0;
+          const bTime = b.updatedAt || 0;
+          return bTime - aTime;
+        }
+        return a.saved ? -1 : 1;
+      });
+    return sorted.slice(0, 4);
+  }, [jobs]);
 
-  const interviews = [
-    { id:1, job:'Frontend Intern', company:'TechNova', date:'Oct 14, 10:00 AM EST', type:'Technical' },
-    { id:2, job:'Security Research Intern', company:'SecureStack', date:'Oct 18, 2:30 PM EST', type:'Behavioral' }
-  ];
+  const activeApplications = useMemo(() => (
+    applications.map(app => ({
+      id: app.id,
+      jobId: app.jobId,
+      title: app.job?.title || 'Opportunity',
+      company: app.job?.company || 'Pending company',
+      stageIndex: app.stageIndex
+    }))
+  ), [applications]);
 
-  const skillInsights = [
-    { skill:'React', level:4 },
-    { skill:'Python', level:3 },
-    { skill:'SQL', level:3 },
-    { skill:'AWS', level:2 }
-  ];
+  const upcomingInterviews = useMemo(() => (
+    interviews
+      .slice()
+      .sort((a, b) => {
+        const aDate = new Date(a.scheduledAt || 0).getTime();
+        const bDate = new Date(b.scheduledAt || 0).getTime();
+        return aDate - bDate;
+      })
+      .slice(0, 3)
+      .map(iv => ({
+        id: iv.id,
+        title: iv.job?.title || 'Interview',
+        company: iv.job?.company || 'Company TBD',
+        date: formatInterviewDate(iv.scheduledAt),
+        type: iv.type || 'Interview'
+      }))
+  ), [interviews]);
 
-  const notifications = [
-    { id:1, type:'app', text:'Your application for Frontend Intern moved to Interview stage.' },
-    { id:2, type:'reminder', text:'Upcoming interview with TechNova in 3 days.' },
-    { id:3, type:'tip', text:'Add more project details to improve profile strength.' },
-    { id:4, type:'job', text:'New role: AI Research Intern at DataForge.' },
-    { id:5, type:'skill', text:'Trending skill: Rust is gaining demand.' }
-  ];
+  const skillInsights = useMemo(() => (
+    skills.map(item => ({
+      skill: item.name,
+      level: item.level,
+      goal: item.goal
+    }))
+  ), [skills]);
+
+  const dashboardNotifications = useMemo(() => notifications.slice(0, 6), [notifications]);
+
+  function handleApply(job) {
+    if (job.status && job.status !== 'withdrawn') {
+      navigate('/student/jobs');
+      return;
+    }
+    applyToJob(job.id);
+    push(`Application started for ${job.title}.`, { type: 'success' });
+  }
+
+  function handleToggleSaved(job) {
+    const wasSaved = job.saved;
+    toggleSavedJob(job.id);
+    push(wasSaved ? `${job.title} removed from saved jobs.` : `${job.title} added to saved jobs.`, { type: wasSaved ? 'info' : 'success' });
+  }
 
   return (
     <div className="student-dash-grid">
@@ -46,7 +116,7 @@ export default function StudentDashboard() {
         <h2 id="hero-heading" className="mt-0">Welcome back, {user?.email.split('@')[0] || 'Student'} 👋</h2>
         <div className="progress-wrap" aria-label="Profile completion" role="group">
           <div className="progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={profileCompletion}>
-            <span style={{width: profileCompletion + '%'}} />
+            <span style={{ width: `${profileCompletion}%` }} />
           </div>
           <span className="progress-text fs-xs muted">Profile {profileCompletion}% complete</span>
         </div>
@@ -55,24 +125,40 @@ export default function StudentDashboard() {
       <section className="surface job-feed" aria-labelledby="jobs-heading">
         <div className="section-head">
           <h3 id="jobs-heading" className="mt-0">Job Feed</h3>
-          <button className="btn btn-sm ghost">View All</button>
+          <button className="btn btn-sm ghost" onClick={() => navigate('/student/jobs')}>View all</button>
         </div>
         <div className="job-grid">
-          {jobs.map(j => (
-            <article key={j.id} className="job-card" aria-label={`${j.title} at ${j.company}`}>
+          {recommendedJobs.length === 0 && (
+            <article className="job-card" aria-label="No recommendations">
+              <p className="muted">No recommendations yet. Explore roles in the jobs hub to get tailored suggestions.</p>
+              <div className="job-actions">
+                <button className="btn btn-sm primary" onClick={() => navigate('/student/jobs')}>Browse jobs</button>
+              </div>
+            </article>
+          )}
+          {recommendedJobs.map(job => (
+            <article key={job.id} className="job-card" aria-label={`${job.title} at ${job.company}`}>
               <div className="job-head">
-                <div className="logo" aria-hidden>{j.logo}</div>
+                <div className="logo" aria-hidden>{job.logo || job.company?.[0] || '🏢'}</div>
                 <div className="meta">
-                  <h4 className="job-title">{j.title}</h4>
-                  <span className="company muted fs-xs">{j.company}</span>
+                  <h4 className="job-title">{job.title}</h4>
+                  <span className="company muted fs-xs">{job.company}</span>
                 </div>
               </div>
               <div className="job-tags">
-                {j.tags.map(t => <span key={t} className="tag">{t}</span>)}
+                {job.tags?.map(tag => <span key={tag} className="tag">{tag}</span>)}
               </div>
-              <div className="job-info fs-xs"><span>{j.location}</span> • <span>{j.salary}</span></div>
+              <div className="job-info fs-xs">
+                <span>{job.location || 'Remote friendly'}</span>
+                {job.salary && <span>• {job.salary}</span>}
+              </div>
               <div className="job-actions">
-                <button className="btn btn-sm primary">Apply</button>
+                <button className="btn btn-sm primary" onClick={() => handleApply(job)}>
+                  {job.status && job.status !== 'withdrawn' ? 'Manage application' : 'Quick apply'}
+                </button>
+                <button className="btn btn-sm ghost" onClick={() => handleToggleSaved(job)}>
+                  {job.saved ? 'Saved' : 'Save'}
+                </button>
               </div>
             </article>
           ))}
@@ -82,17 +168,23 @@ export default function StudentDashboard() {
       <section className="surface status-tracker" aria-labelledby="status-heading">
         <h3 id="status-heading" className="mt-0">Application Status</h3>
         <ul className="app-list">
-          {applications.map(app => (
+          {activeApplications.length === 0 && (
+            <li className="app-row" aria-label="No active applications">
+              <div className="app-meta">
+                <strong className="fs-sm">No active applications</strong>
+                <span className="muted fs-xs">Start applying to see your progress here.</span>
+              </div>
+            </li>
+          )}
+          {activeApplications.map(app => (
             <li key={app.id} className="app-row">
               <div className="app-meta">
-                <strong className="fs-sm">{app.job}</strong>
+                <strong className="fs-sm">{app.title}</strong>
                 <span className="muted fs-xs">{app.company}</span>
               </div>
-              <ol className="stage-line" aria-label={`Progress for ${app.job}`}>
-                {app.stages.map(stage => {
-                  const currentIndex = app.stages.indexOf(app.stage);
-                  const idx = app.stages.indexOf(stage);
-                  const state = idx < currentIndex ? 'done' : idx === currentIndex ? 'current':'upcoming';
+              <ol className="stage-line" aria-label={`Progress for ${app.title}`}>
+                {applicationStages.map((stage, index) => {
+                  const state = index < app.stageIndex ? 'done' : index === app.stageIndex ? 'current' : 'upcoming';
                   return <li key={stage} className={`stage ${state}`}>{stage}</li>;
                 })}
               </ol>
@@ -104,10 +196,18 @@ export default function StudentDashboard() {
       <section className="surface interviews" aria-labelledby="interviews-heading">
         <h3 id="interviews-heading" className="mt-0">Upcoming Interviews</h3>
         <ul className="interview-list">
-          {interviews.map(iv => (
+          {upcomingInterviews.length === 0 && (
+            <li className="interview-row" aria-label="No scheduled interviews">
+              <div className="iv-meta">
+                <strong className="fs-sm">No interviews scheduled</strong>
+                <span className="muted fs-xs">Keep an eye on your inbox for recruiter responses.</span>
+              </div>
+            </li>
+          )}
+          {upcomingInterviews.map(iv => (
             <li key={iv.id} className="interview-row">
               <div className="iv-meta">
-                <strong className="fs-sm">{iv.job}</strong>
+                <strong className="fs-sm">{iv.title}</strong>
                 <span className="muted fs-xs">{iv.company}</span>
               </div>
               <div className="iv-time fs-xs">{iv.date}</div>
@@ -120,10 +220,15 @@ export default function StudentDashboard() {
       <section className="surface skills" aria-labelledby="skills-heading">
         <h3 id="skills-heading" className="mt-0">Skill Insights</h3>
         <div className="skill-bars">
-          {skillInsights.map(s => (
-            <div key={s.skill} className="skill-bar" aria-label={`${s.skill} proficiency ${s.level} of 5`}>
-              <span className="label fs-xs">{s.skill}</span>
-              <div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={5} aria-valuenow={s.level}><span style={{width:(s.level/5)*100+'%'}} /></div>
+          {skillInsights.length === 0 && (
+            <p className="muted">Add skills in your profile builder to surface growth goals here.</p>
+          )}
+          {skillInsights.map(skill => (
+            <div key={skill.skill} className="skill-bar" aria-label={`${skill.skill} proficiency ${skill.level} of ${skill.goal || 5}`}>
+              <span className="label fs-xs">{skill.skill}</span>
+              <div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={skill.goal || 5} aria-valuenow={skill.level}>
+                <span style={{ width: `${Math.min((skill.level / (skill.goal || 5)) * 100, 100)}%` }} />
+              </div>
             </div>
           ))}
         </div>
@@ -132,8 +237,11 @@ export default function StudentDashboard() {
       <aside className="surface notifications" aria-labelledby="notifications-heading">
         <h3 id="notifications-heading" className="mt-0">Notifications</h3>
         <ul className="notif-list" role="list">
-          {notifications.map(n => (
-            <li key={n.id} className={`notif ${n.type}`}>{n.text}</li>
+          {dashboardNotifications.length === 0 && (
+            <li className="notif" aria-label="No notifications">You're all caught up.</li>
+          )}
+          {dashboardNotifications.map(item => (
+            <li key={item.id} className={`notif ${item.type}`}>{item.text}</li>
           ))}
         </ul>
       </aside>

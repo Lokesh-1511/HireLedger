@@ -1,106 +1,90 @@
-<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
 - [ ] Verify that the copilot-instructions.md file in the .github directory is created.
 
 - [ ] Clarify Project Requirements
-	<!-- Ask for project type, language, and frameworks if not specified. Skip if already provided. -->
+	- Ask for project type, language, and frameworks if not specified. Skip if already provided.
 
 - [ ] Scaffold the Project
-	<!--
-	Ensure that the previous step has been marked as completed.
-	Call project setup tool with projectType parameter.
-	Run scaffolding command to create project files and folders.
-	Use '.' as the working directory.
-	If no appropriate projectType is available, search documentation using available tools.
-	Otherwise, create the project structure manually using available file creation tools.
-	-->
+	- Ensure the previous step has been completed.
+	- Call the project setup tool with the `projectType` parameter.
+	- Run the scaffolding command in the current working directory (`.`).
+	- If no matching project type exists, research alternatives and scaffold manually using the file creation tools.
 
 - [ ] Customize the Project
-	<!--
-	Verify that all previous steps have been completed successfully and you have marked the step as completed.
-	Develop a plan to modify codebase according to user requirements.
-	Apply modifications using appropriate tools and user-provided references.
-	Skip this step for "Hello World" projects.
-	-->
+	- Confirm earlier steps are complete before modifying code.
+	- Develop a concrete plan for the requested changes.
+	- Apply edits with the appropriate tools and references.
+	- Skip for "Hello World" starter tasks.
 
 - [ ] Install Required Extensions
-	<!-- ONLY install extensions provided mentioned in the get_project_setup_info. Skip this step otherwise and mark as completed. -->
+	- Only install extensions specified by `get_project_setup_info`. Otherwise mark as skipped.
 
 - [ ] Compile the Project
-	<!--
-	Verify that all previous steps have been completed.
-	Install any missing dependencies.
-	Run diagnostics and resolve any issues.
-	Check for markdown files in project folder for relevant instructions on how to do this.
-	-->
+	- Ensure prerequisites are fulfilled.
+	- Install missing dependencies.
+	- Run diagnostics or builds and resolve issues.
+	- Check project markdown docs for any build guidance.
 
 - [ ] Create and Run Task
-	<!--
-	Verify that all previous steps have been completed.
-	Check https://code.visualstudio.com/docs/debugtest/tasks to determine if the project needs a task. If so, use the create_and_run_task to create and launch a task based on package.json, README.md, and project structure.
-	Skip this step otherwise.
-	 -->
+	- After compiling, determine whether a VS Code task is needed (see official docs).
+	- If required, create and launch the task based on `package.json`, `README.md`, and project structure.
+	- Skip if no task is necessary.
 
 - [ ] Launch the Project
-	<!--
-	Verify that all previous steps have been completed.
-	Prompt user for debug mode, launch only if confirmed.
-	 -->
+	- Launch only after previous steps succeed.
+	- Ask the user whether to run in debug mode before starting.
 
 - [ ] Ensure Documentation is Complete
-	<!--
-	Verify that all previous steps have been completed.
-	Verify that README.md and the copilot-instructions.md file in the .github directory exists and contains current project information.
-	Clean up the copilot-instructions.md file in the .github directory by removing all HTML comments.
-	 -->
+	- Confirm README.md and `.github/copilot-instructions.md` are present and up to date.
+	- Keep this checklist free of HTML comments.
 
-<!--
 ## Execution Guidelines
-PROGRESS TRACKING:
-- If any tools are available to manage the above todo list, use it to track progress through this checklist.
-- After completing each step, mark it complete and add a summary.
-- Read current todo list status before starting each new step.
 
-COMMUNICATION RULES:
-- Avoid verbose explanations or printing full command outputs.
-- If a step is skipped, state that briefly (e.g. "No extensions needed").
-- Do not explain project structure unless asked.
-- Keep explanations concise and focused.
+**Progress Tracking**
+- Use any available todo tooling to track this checklist.
+- Mark steps complete with summaries once finished.
+- Review the current todo state before starting a new step.
 
-DEVELOPMENT RULES:
-- Use '.' as the working directory unless user specifies otherwise.
-- Avoid adding media or external links unless explicitly requested.
-- Use placeholders only with a note that they should be replaced.
-- Use VS Code API tool only for VS Code extension projects.
-- Once the project is created, it is already opened in Visual Studio Code—do not suggest commands to open this project in Visual Studio again.
-- If the project setup information has additional rules, follow them strictly.
+**Communication Rules**
+- Avoid overly verbose explanations or full command outputs.
+- Briefly justify skipped steps (e.g., "No extensions required").
+- Do not describe the project structure unless requested.
+- Keep responses focused and concise.
 
-FOLDER CREATION RULES:
-- Always use the current directory as the project root.
-- If you are running any terminal commands, use the '.' argument to ensure that the current working directory is used ALWAYS.
-- Do not create a new folder unless the user explicitly requests it besides a .vscode folder for a tasks.json file.
-- If any of the scaffolding commands mention that the folder name is not correct, let the user know to create a new folder with the correct name and then reopen it again in vscode.
+**Development Rules**
+- Work from the current directory unless instructed otherwise.
+- Refrain from adding external media or links unless required.
+- Use placeholders only when noted for later replacement.
+- Use the VS Code API tool solely for extension projects.
+- Do not suggest reopening the project; assume it is already loaded in VS Code.
+- Follow any additional setup guidance provided by the project.
 
-EXTENSION INSTALLATION RULES:
-- Only install extension specified by the get_project_setup_info tool. DO NOT INSTALL any other extensions.
+**Folder Creation Rules**
+- Treat the current directory as the project root.
+- When running terminal commands, ensure they execute relative to `.`.
+- Avoid creating new folders unless explicitly requested (except `.vscode` for `tasks.json`).
+- If scaffolding commands complain about folder naming, inform the user to rename/reopen accordingly.
 
-PROJECT CONTENT RULES:
-- If the user has not specified project details, assume they want a "Hello World" project as a starting point.
-- Avoid adding links of any type (URLs, files, folders, etc.) or integrations that are not explicitly required.
-- Avoid generating images, videos, or any other media files unless explicitly requested.
-- If you need to use any media assets as placeholders, let the user know that these are placeholders and should be replaced with the actual assets later.
-- Ensure all generated components serve a clear purpose within the user's requested workflow.
-- If a feature is assumed but not confirmed, prompt the user for clarification before including it.
-- If you are working on a VS Code extension, use the VS Code API tool with a query to find relevant VS Code API references and samples related to that query.
+**Extension Installation Rules**
+- Install only the extensions specified via `get_project_setup_info`.
 
-TASK COMPLETION RULES:
-- Your task is complete when:
-  - Project is successfully scaffolded and compiled without errors
-  - copilot-instructions.md file in the .github directory exists in the project
-  - README.md file exists and is up to date
-  - User is provided with clear instructions to debug/launch the project
+**Project Content Rules**
+- Default to a "Hello World" starter when requirements are unspecified.
+- Skip adding non-requested integrations or links.
+- Do not generate media assets without explicit direction.
+- Flag placeholder assets so users can replace them later.
+- Ensure each generated component ties directly to the user workflow.
+- Seek clarification before implementing assumed features.
+- For VS Code extensions, consult the VS Code API documentation via the provided tool.
 
-Before starting a new task in the above plan, update progress in the plan.
--->
+**Task Completion Rules**
+- Consider the task complete when:
+  - The project scaffolding/build succeeds without errors.
+  - `.github/copilot-instructions.md` exists and reflects current guidance.
+  - `README.md` is current.
+  - The user has clear instructions to debug or launch the project.
+
+- Before beginning a new task, update progress within this plan.
+
 - Work through each checklist item systematically.
 - Keep communication concise and focused.
 - Follow development best practices.

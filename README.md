@@ -12,6 +12,7 @@ Progressive Web Application base for a campus recruitment ecosystem (employers, 
 - Core pages: Dashboard, Jobs, Candidates, Settings
 - Collapsible sidebar & fixed top navbar
 - Mock authentication (email/password + role) with localStorage persistence
+- Student job explorer & dashboard powered by a persistent `StudentDataContext` (mock API + local storage)
 
 ## Folder Structure (excerpt)
 ```
@@ -109,6 +110,15 @@ Stored under `localStorage` key `hl_profile_builder_v1`:
 - Auto-suggest education institutions.
 - Certificate OCR parsing.
 - Accessibility: live region for step changes & upload announcements.
+
+## Student Data Layer & Jobs Experience (New)
+
+Built a dedicated `StudentDataContext` that seeds realistic sample jobs, applications, interviews, notifications, and skills while persisting student choices to `localStorage` (`hl_student_portal_v1`). This enables student surfaces to share a consistent, stateful experience without a backend.
+
+- `StudentJobs.jsx` now sources data/actions from the context, replacing alert placeholders with real apply/withdraw/save flows, stage progression, and a details modal.
+- `StudentDashboard.jsx` mirrors the same data for profile progress, job recommendations, application status lanes, interview schedule, skill goals, and notifications.
+- Actions trigger live toasts for feedback and write through to the persistent store so both pages stay in sync on refresh.
+- Filters, saved jobs, and application stages survive reloads and are safe-guarded against malformed local storage.
 
 ## Mock Authentication
 Implemented lightweight auth layer for prototyping:

@@ -27,6 +27,7 @@ import AdminApi from './pages/AdminApi.jsx';
 import { ToastProvider } from './context/ToastContext.jsx';
 import { SearchProvider } from './context/SearchContext.jsx';
 import { PWAEnhancements } from './components/pwa/PWAEnhancements.jsx';
+import { StudentDataProvider } from './context/StudentDataContext.jsx';
 
 function Splash() {
   return (
@@ -75,8 +76,10 @@ export default function App() {
     <AuthProvider>
       <ToastProvider>
         <SearchProvider>
-          <Splash />
-          <AppShell />
+          <StudentDataProvider>
+            <Splash />
+            <AppShell />
+          </StudentDataProvider>
         </SearchProvider>
       </ToastProvider>
     </AuthProvider>

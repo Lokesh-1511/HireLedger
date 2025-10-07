@@ -42,15 +42,24 @@ function StepContainer() {
   };
   return (
     <div className="pb-step-card surface">
-      {map[key]}
+      <form id="profile-step-form" onSubmit={e=>e.preventDefault()} noValidate>
+        {map[key]}
+      </form>
     </div>
   );
 }
 
 function StickyFooter() {
-  const { currentStep, next, prev, saveDraft, steps, submitProfile, submitting, validateAll, errors } = useProfileBuilder();
+  const { currentStep, next, prev, saveDraft, steps, submitProfile, submitting, validateAll } = useProfileBuilder();
   const isLast = currentStep === steps.length - 1;
+  const gate = () => {
+    const form = document.getElementById('profile-step-form');
+    if (form && !form.reportValidity()) return false;
+    return true;
+  };
+  const goNext = () => { if (gate()) next(); else validateAll(); };
   const submit = async () => {
+    if (!gate()) { validateAll(); return; }
     const res = await submitProfile();
     if (!res.ok) {
       // Force revalidation to surface errors on final attempt
@@ -67,7 +76,7 @@ function StickyFooter() {
         <div className="actions-row">
           <button type="button" className="btn ghost" onClick={saveDraft}>Save Draft</button>
           {currentStep > 0 && <button type="button" className="btn" onClick={prev}>Back</button>}
-          {!isLast && <button type="button" className="btn primary" onClick={next}>Next</button>}
+          {!isLast && <button type="button" className="btn primary" onClick={goNext}>Next</button>}
           {isLast && <button type="button" className="btn primary" disabled={submitting} onClick={submit}>{submitting ? 'Submitting...' : 'Submit Profile'}</button>}
         </div>
       </div>

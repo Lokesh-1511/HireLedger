@@ -37,9 +37,19 @@ export function ProfileBuilderProvider({ children }) {
   });
   const [currentStep, setCurrentStep] = useState(0);
   const [dirty, setDirty] = useState(false);
-  const initialValidation = validateProfile(defaultData);
+  // Perform initial validation against the ACTUAL loaded draft (may contain prior user input),
+  // not the empty defaults, to avoid falsely marking filled fields as required on first paint.
+  const initialValidation = validateProfile(typeof data === 'object' ? data : defaultData);
   const [errors, setErrors] = useState(() => initialValidation.errors);
   const [fieldErrors, setFieldErrors] = useState(() => initialValidation.fieldErrors || {});
+  // One-time mount revalidation safeguard (covers edge cases where data is hydrated after lazy load)
+  useEffect(() => {
+    const { errors: freshErrors, fieldErrors: freshFieldErrors } = validateProfile(data);
+    setErrors(freshErrors);
+    setFieldErrors(freshFieldErrors);
+  // run only once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState(null);
 
@@ -54,21 +64,28 @@ export function ProfileBuilderProvider({ children }) {
   }, [data, dirty]);
 
   const updateSection = useCallback((section, value) => {
-    setData(prev => ({ ...prev, [section]: value }));
-    setDirty(true);
-    // Re-validate only the changed section (lightweight)
-    setErrors(prevErrs => {
-      const nextData = { ...data, [section]: value };
-      const { errors: fresh, fieldErrors: fe } = validateProfile(nextData);
-      setFieldErrors(fe);
-      return { ...prevErrs, [section]: fresh[section] };
+    // Atomic update + full validation to prevent stale closure / race conditions.
+    setData(prev => {
+      const next = { ...prev, [section]: value };
+      const { errors: freshErrors, fieldErrors: freshFieldErrors } = validateProfile(next);
+      setErrors(freshErrors);      // full replacement ensures removed errors disappear
+      setFieldErrors(freshFieldErrors);
+      return next;
     });
+    setDirty(true);
   }, []);
 
   const next = useCallback(() => setCurrentStep(s => { const n = Math.min(s + 1, steps.length - 1); setDirty(true); return n; }), []);
   const prev = useCallback(() => setCurrentStep(s => { const n = Math.max(s - 1, 0); setDirty(true); return n; }), []);
   const goTo = useCallback((index) => { setDirty(true); setCurrentStep(() => Math.min(Math.max(index,0), steps.length -1)); }, []);
-  const reset = useCallback(() => { setData(defaultData); setCurrentStep(0); setDirty(true); }, []);
+  const reset = useCallback(() => {
+    setData(defaultData);
+    const { errors: freshErrors, fieldErrors: freshFieldErrors } = validateProfile(defaultData);
+    setErrors(freshErrors);
+    setFieldErrors(freshFieldErrors);
+    setCurrentStep(0);
+    setDirty(true);
+  }, []);
 
   // Full validation function
   const validateAll = useCallback(() => {
@@ -111,6 +128,10 @@ export function ProfileBuilderProvider({ children }) {
     try {
       const doc = buildStudentProfileDoc();
       await upsertStudentProfile(user.uid, doc);
+      // Re-validate to clear any transient error states post-submit
+      const { errors: freshErrors, fieldErrors: freshFieldErrors } = validateProfile(data);
+      setErrors(freshErrors);
+      setFieldErrors(freshFieldErrors);
       setSubmitResult({ ok:true });
       return { ok:true };
     } catch(e) {
@@ -126,7 +147,13 @@ export function ProfileBuilderProvider({ children }) {
   const value = {
     data, updateSection,
     currentStep, steps, next, prev, goTo, reset,
-    saveDraft: () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}; setDirty(false); },
+    saveDraft: () => {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+      const { errors: freshErrors, fieldErrors: freshFieldErrors } = validateProfile(data);
+      setErrors(freshErrors);
+      setFieldErrors(freshFieldErrors);
+      setDirty(false);
+    },
     dirty,
   errors,
   fieldErrors,

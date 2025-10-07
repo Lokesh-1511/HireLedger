@@ -58,14 +58,18 @@ export default function StudentDashboard() {
   }, [jobs]);
 
   const activeApplications = useMemo(() => (
-    applications.map(app => ({
-      id: app.id,
-      jobId: app.jobId,
-      title: app.job?.title || 'Opportunity',
-      company: app.job?.company || 'Pending company',
-      stageIndex: app.stageIndex
-    }))
-  ), [applications]);
+    applications.map(app => {
+      const status = app.status;
+      const idx = applicationStages.indexOf(status);
+      return {
+        id: app.id,
+        jobId: app.jobId,
+        title: app.job?.title || 'Opportunity',
+        company: app.job?.company || app.job?.companyName || 'Pending company',
+        stageIndex: idx === -1 ? 0 : idx
+      };
+    })
+  ), [applications, applicationStages]);
 
   const upcomingInterviews = useMemo(() => (
     interviews
@@ -93,7 +97,11 @@ export default function StudentDashboard() {
     }))
   ), [skills]);
 
-  const dashboardNotifications = useMemo(() => notifications.slice(0, 6), [notifications]);
+  const dashboardNotifications = useMemo(() => notifications.slice(0, 6).map(n => ({
+    id: n.id,
+    type: n.type,
+    text: n.message || n.title || n.text
+  })), [notifications]);
 
   function handleApply(job) {
     if (job.status && job.status !== 'withdrawn') {
@@ -139,7 +147,7 @@ export default function StudentDashboard() {
           {recommendedJobs.map(job => (
             <article key={job.id} className="job-card" aria-label={`${job.title} at ${job.company}`}>
               <div className="job-head">
-                <div className="logo" aria-hidden>{job.logo || job.company?.[0] || '🏢'}</div>
+                <div className="logo" aria-hidden>{job.logo || (job.company || job.companyName || '?').charAt(0).toUpperCase()}</div>
                 <div className="meta">
                   <h4 className="job-title">{job.title}</h4>
                   <span className="company muted fs-xs">{job.company}</span>

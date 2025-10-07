@@ -1,123 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import usePersistentState from '../hooks/usePersistentState.js';
+import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { db } from '../firebase.js';
+import { useAuth } from './AuthContext.jsx';
+import { withdrawApplication as withdrawApplicationSvc, updateApplicationStatus, addStudentSkill, updateStudentSkill, removeStudentSkill } from '../services/firestoreService.js';
 
-const STORAGE_KEY = 'hl_student_portal_v1';
-export const APPLICATION_STAGES = ['Applied', 'Screen', 'Interview', 'Offer'];
+export const APPLICATION_STAGES = ['applied', 'screen', 'interview', 'offer'];
 
-const seedJobs = [
-  {
-    id: 'job-frontend-intern',
-    title: 'Frontend Intern',
-    company: 'TechNova',
-    logo: '🛰️',
-    location: 'Remote',
-    type: 'Internship',
-    salary: '$25/hr',
-    tags: ['React', 'UI', 'CSS'],
-    posted: '2d',
-    status: 'applied',
-    saved: false,
-    description: 'Help craft accessible UI components and support the design system rollout for our core product.'
-  },
-  {
-    id: 'job-data-analyst',
-    title: 'Data Analyst Intern',
-    company: 'DataForge',
-    logo: '📊',
-    location: 'NYC',
-    type: 'Internship',
-    salary: '$28/hr',
-    tags: ['SQL', 'Python', 'ETL'],
-    posted: '1d',
-    status: 'screen',
-    saved: false,
-    description: 'Analyze product telemetry, maintain BI dashboards, and prototype quick ETL pipelines with mentorship.'
-  },
-  {
-    id: 'job-devops-trainee',
-    title: 'DevOps Trainee',
-    company: 'CloudSpan',
-    logo: '☁️',
-    location: 'Remote',
-    type: 'Apprenticeship',
-    salary: '$30/hr',
-    tags: ['AWS', 'Terraform', 'CI/CD'],
-    posted: '3d',
-    status: null,
-    saved: false,
-    description: 'Automate infrastructure workflows, learn observability best practices, and shadow incident response drills.'
-  },
-  {
-    id: 'job-security-research',
-    title: 'Security Research Intern',
-    company: 'SecureStack',
-    logo: '🔐',
-    location: 'Austin, TX',
-    type: 'Internship',
-    salary: '$32/hr',
-    tags: ['AppSec', 'OWASP', 'SAST'],
-    posted: '5d',
-    status: null,
-    saved: false,
-    description: 'Assist the security research team with threat modeling reviews and automated scanning experiments.'
-  },
-  {
-    id: 'job-ml-intern',
-    title: 'Machine Learning Intern',
-    company: 'InsightWorks',
-    logo: '🤖',
-    location: 'Chicago, IL',
-    type: 'Internship',
-    salary: '$29/hr',
-    tags: ['Python', 'Pandas', 'ML'],
-    posted: '4d',
-    status: null,
-    saved: false,
-    description: 'Build data cleaning scripts, evaluate baseline models, and partner with product to translate insights.'
-  },
-  {
-    id: 'job-product-ops',
-    title: 'Product Operations Associate',
-    company: 'Brightwave',
-    logo: '💡',
-    location: 'Remote',
-    type: 'Full-time',
-    salary: '$68k',
-    tags: ['Ops', 'Analytics', 'CX'],
-    posted: '6d',
-    status: null,
-    saved: false,
-    description: 'Coordinate product releases, measure experiment outcomes, and streamline feedback loops with stakeholders.'
-  }
-];
-
-const seedState = {
-  jobs: seedJobs,
-  applications: [
-    { id: 'app-frontend', jobId: 'job-frontend-intern', stageIndex: 2, updatedAt: Date.now() - 1000 * 60 * 60 * 24 * 2 },
-    { id: 'app-data', jobId: 'job-data-analyst', stageIndex: 1, updatedAt: Date.now() - 1000 * 60 * 60 * 12 }
-  ],
-  interviews: [
-    { id: 'iv-frontend', jobId: 'job-frontend-intern', scheduledAt: '2025-10-14T14:00:00-04:00', type: 'Technical', medium: 'Zoom' },
-    { id: 'iv-security', jobId: 'job-security-research', scheduledAt: '2025-10-18T14:30:00-04:00', type: 'Behavioral', medium: 'Google Meet' }
-  ],
-  skills: [
-    { id: 'skill-react', name: 'React', level: 4, goal: 5 },
-    { id: 'skill-python', name: 'Python', level: 3, goal: 5 },
-    { id: 'skill-sql', name: 'SQL', level: 3, goal: 5 },
-    { id: 'skill-aws', name: 'AWS', level: 2, goal: 4 }
-  ],
-  notifications: [
-    { id: 'notif-1', type: 'app', text: 'Your application for Frontend Intern moved to Interview stage.', read: false, createdAt: Date.now() - 1000 * 60 * 60 * 2 },
-    { id: 'notif-2', type: 'reminder', text: 'Upcoming interview with TechNova in 3 days.', read: false, createdAt: Date.now() - 1000 * 60 * 60 * 24 },
-    { id: 'notif-3', type: 'tip', text: 'Add more project details to improve profile strength.', read: false, createdAt: Date.now() - 1000 * 60 * 60 * 26 },
-    { id: 'notif-4', type: 'job', text: 'New role: AI Research Intern at DataForge.', read: false, createdAt: Date.now() - 1000 * 60 * 60 * 6 },
-    { id: 'notif-5', type: 'skill', text: 'Trending skill: Rust is gaining demand.', read: false, createdAt: Date.now() - 1000 * 60 * 60 * 12 }
-  ],
-  preferences: {
-    filters: { query: '', tags: [], tab: 'all' }
-  }
-};
+// Skills now persisted in Firestore under users/<uid>/skills
+const initialSkills = [];
 
 const StudentDataContext = createContext(null);
 
@@ -161,11 +51,22 @@ function pushNotification(notifications, payload) {
 }
 
 export function StudentDataProvider({ children }) {
-  const [state, setState, resetState] = usePersistentState(STORAGE_KEY, seedState, { throttleMs: 300 });
-  const resetStudentData = useCallback(() => {
-    resetState();
-  }, [resetState]);
+  const { user } = useAuth();
+  const uid = user?.uid;
+  const [jobs, setJobs] = useState([]); // Firestore jobs
+  const [applicationsRaw, setApplicationsRaw] = useState([]); // raw application docs
+  const [interviewsRaw, setInterviewsRaw] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [skills, setSkills] = useState(initialSkills);
+  const [filters, setFiltersState] = useState({ query: '', tags: [], tab: 'all' });
+  // Merge-style setter so callers can pass partials
+  const setFilters = useCallback((patch) => {
+    setFiltersState(prev => ({ ...prev, ...patch }));
+  }, []);
   const [profileCompletion, setProfileCompletion] = useState(() => readProfileSnapshot());
+  const resetStudentData = useCallback(() => {
+    setFilters({ query: '', tags: [], tab: 'all' });
+  }, []);
   const refreshProfileCompletion = useCallback(() => {
     setProfileCompletion(readProfileSnapshot());
   }, []);
@@ -181,144 +82,135 @@ export function StudentDataProvider({ children }) {
     return () => window.removeEventListener('storage', onStorage);
   }, [refreshProfileCompletion]);
 
-  const jobMap = useMemo(() => {
-    return new Map(state.jobs.map(job => [job.id, job]));
-  }, [state.jobs]);
+  const jobMap = useMemo(() => new Map(jobs.map(j => [j.id, j])), [jobs]);
 
   const applications = useMemo(() => {
-    return state.applications.map(app => {
-      const job = jobMap.get(app.jobId);
-      return {
-        ...app,
-        job,
-        stage: APPLICATION_STAGES[app.stageIndex] || APPLICATION_STAGES[0]
-      };
-    }).filter(app => app.job);
-  }, [state.applications, jobMap]);
+    return applicationsRaw.map(a => ({ ...a, job: jobMap.get(a.jobId) })).filter(a => a.job);
+  }, [applicationsRaw, jobMap]);
 
-  const interviews = useMemo(() => {
-    return state.interviews.map(iv => ({
-      ...iv,
-      job: jobMap.get(iv.jobId)
-    })).filter(iv => iv.job);
-  }, [state.interviews, jobMap]);
+  const interviews = useMemo(() => interviewsRaw.map(iv => ({ ...iv, job: jobMap.get(iv.jobId) })).filter(iv => iv.job), [interviewsRaw, jobMap]);
 
-  const applyToJob = useCallback((jobId) => {
-    setState(prev => {
-      const job = prev.jobs.find(j => j.id === jobId);
-      if (!job) return prev;
-      const jobs = prev.jobs.map(j => j.id === jobId ? { ...j, status: 'applied', saved: false, updatedAt: Date.now() } : j);
-      const hasApplication = prev.applications.some(app => app.jobId === jobId);
-      const applications = hasApplication ? prev.applications : [
-        ...prev.applications,
-        { id: `app-${jobId}`, jobId, stageIndex: 0, updatedAt: Date.now() }
-      ];
-      const notifications = pushNotification(prev.notifications, { type: 'app', text: `Application started for ${job.title}.` });
-      return { ...prev, jobs, applications, notifications };
+  const applyToJob = useCallback(async (jobId) => {
+    if (!uid) return;
+    // avoid duplicate
+    if (applicationsRaw.some(a => a.jobId === jobId)) return;
+    await addDoc(collection(db, 'applications'), {
+      jobId,
+      studentId: uid,
+      recruiterId: jobMap.get(jobId)?.companyId || jobMap.get(jobId)?.companyId || 'unknown',
+      status: 'applied',
+      appliedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     });
-  }, [setState]);
+    await addDoc(collection(db, 'users', uid, 'notifications'), {
+      title: 'Application Started',
+      message: `Application started for ${jobMap.get(jobId)?.title || 'a role'}.`,
+      type: 'job',
+      createdAt: serverTimestamp(),
+      read: false
+    });
+  }, [uid, applicationsRaw, jobMap]);
 
-  const setJobStatus = useCallback((jobId, status) => {
-    setState(prev => ({
-      ...prev,
-      jobs: prev.jobs.map(job => job.id === jobId ? { ...job, status, updatedAt: Date.now() } : job)
-    }));
-  }, [setState]);
+  const setJobStatus = useCallback(async (jobId, status) => {
+    await updateDoc(doc(db, 'jobs', jobId), { status, updatedAt: serverTimestamp() });
+  }, []);
 
   const toggleSavedJob = useCallback((jobId) => {
-    setState(prev => ({
-      ...prev,
-      jobs: prev.jobs.map(job => job.id === jobId ? { ...job, saved: !job.saved, updatedAt: Date.now() } : job)
-    }));
-  }, [setState]);
+    // Saved state currently local-only; could persist to subcollection later
+    setJobs(prev => prev.map(j => j.id === jobId ? { ...j, saved: !j.saved } : j));
+  }, []);
 
-  const setApplicationStage = useCallback((jobId, stageIndex) => {
-    setState(prev => {
-      const idx = prev.applications.findIndex(app => app.jobId === jobId);
-      if (idx === -1) return prev;
-      const applications = prev.applications.map(app => app.jobId === jobId ? { ...app, stageIndex, updatedAt: Date.now() } : app);
-      const job = prev.jobs.find(j => j.id === jobId);
-      const stageStatus = APPLICATION_STAGES[stageIndex]?.toLowerCase();
-      const jobs = stageStatus ? prev.jobs.map(j => j.id === jobId ? { ...j, status: stageStatus, updatedAt: Date.now() } : j) : prev.jobs;
-      const notifications = stageIndex > prev.applications[idx].stageIndex
-        ? pushNotification(prev.notifications, { type: 'app', text: `Application for ${job?.title || 'job'} moved to ${APPLICATION_STAGES[stageIndex]}.` })
-        : prev.notifications;
-      return { ...prev, applications, notifications, jobs };
+  const setApplicationStage = useCallback(async (applicationId, status) => {
+    await updateApplicationStatus(applicationId, status);
+  }, []);
+
+  const advanceApplicationStage = useCallback(async (applicationId) => {
+    const app = applicationsRaw.find(a => a.id === applicationId);
+    if (!app) return;
+    const order = APPLICATION_STAGES;
+    const idx = order.indexOf(app.status);
+    const next = idx === -1 ? order[0] : order[Math.min(idx + 1, order.length - 1)];
+    if (next !== app.status) await updateApplicationStatus(applicationId, next);
+  }, [applicationsRaw]);
+
+  const withdrawApplication = useCallback(async (applicationId) => {
+    await withdrawApplicationSvc(applicationId);
+  }, []);
+
+  const markNotificationRead = useCallback(async (id) => {
+    if (!uid) return;
+    await updateDoc(doc(db, 'users', uid, 'notifications', id), { read: true });
+  }, [uid]);
+
+  const clearNotifications = useCallback(async () => {
+    if (!uid) return;
+    // Bulk delete client-side (fetch snapshot then delete each)
+    const qn = await getDocs(collection(db, 'users', uid, 'notifications'));
+    await Promise.all(qn.docs.map(d => deleteDoc(d.ref)));
+  }, [uid]);
+
+  const updateSkillLevel = useCallback(async (skillId, level) => {
+    if (!uid) return;
+    await updateStudentSkill(uid, skillId, { level: clampLevel(level) });
+  }, [uid]);
+
+  const addSkill = useCallback(async (name, level = 0, goal = 5, category = 'general') => {
+    if (!uid) return null;
+    return addStudentSkill(uid, { name, level, goal, category });
+  }, [uid]);
+
+  const removeSkill = useCallback(async (skillId) => {
+    if (!uid) return;
+    await removeStudentSkill(uid, skillId);
+  }, [uid]);
+
+  // Firestore subscriptions
+  // Jobs are public; subscribe regardless of auth to avoid empty feed pre-login.
+  useEffect(() => {
+    const unsubJobs = onSnapshot(collection(db, 'jobs'), snap => {
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Normalize company field & filter out drafts
+      const normalized = all
+        .filter(j => j.status !== 'draft')
+        .map(j => ({
+          ...j,
+          company: j.company || j.companyName || 'Company',
+        }))
+        .sort((a,b)=>{
+          const at = (a.postedAt && a.postedAt.toMillis?.()) || 0;
+          const bt = (b.postedAt && b.postedAt.toMillis?.()) || 0;
+          return bt - at;
+        });
+      setJobs(normalized);
     });
-  }, [setState]);
+    return () => unsubJobs();
+  }, []);
 
-  const advanceApplicationStage = useCallback((jobId) => {
-    setState(prev => {
-      const app = prev.applications.find(a => a.jobId === jobId);
-      if (!app) return prev;
-      const nextIndex = nextStageIndex(app.stageIndex);
-      if (nextIndex === app.stageIndex) return prev;
-      const applications = prev.applications.map(a => a.jobId === jobId ? { ...a, stageIndex: nextIndex, updatedAt: Date.now() } : a);
-      const job = prev.jobs.find(j => j.id === jobId);
-      const notifications = pushNotification(prev.notifications, { type: 'app', text: `Great! ${job?.title || 'Application'} advanced to ${APPLICATION_STAGES[nextIndex]}.` });
-      const stageStatus = APPLICATION_STAGES[nextIndex]?.toLowerCase();
-      const jobs = stageStatus ? prev.jobs.map(j => j.id === jobId ? { ...j, status: stageStatus, updatedAt: Date.now() } : j) : prev.jobs;
-      return { ...prev, applications, notifications, jobs };
-    });
-  }, [setState]);
-
-  const withdrawApplication = useCallback((jobId) => {
-    setState(prev => {
-      if (!prev.applications.some(app => app.jobId === jobId)) return prev;
-      const applications = prev.applications.filter(app => app.jobId !== jobId);
-      const jobs = prev.jobs.map(job => job.id === jobId ? { ...job, status: 'withdrawn', updatedAt: Date.now() } : job);
-      const notifications = pushNotification(prev.notifications, { type: 'reminder', text: `You withdrew your application for ${prev.jobs.find(j => j.id === jobId)?.title || 'a role'}.` });
-      return { ...prev, applications, jobs, notifications };
-    });
-  }, [setState]);
-
-  const markNotificationRead = useCallback((id) => {
-    setState(prev => ({
-      ...prev,
-      notifications: prev.notifications.map(n => n.id === id ? { ...n, read: true } : n)
-    }));
-  }, [setState]);
-
-  const clearNotifications = useCallback(() => {
-    setState(prev => ({ ...prev, notifications: [] }));
-  }, [setState]);
-
-  const updateSkillLevel = useCallback((skillId, level) => {
-    setState(prev => ({
-      ...prev,
-      skills: prev.skills.map(skill => skill.id === skillId ? { ...skill, level: clampLevel(level) } : skill)
-    }));
-  }, [setState]);
-
-  const setFilters = useCallback((filters) => {
-    setState(prev => {
-      const currentPreferences = prev.preferences ?? { filters: { query: '', tags: [], tab: 'all' } };
-      const currentFilters = currentPreferences.filters ?? { query: '', tags: [], tab: 'all' };
-      return {
-        ...prev,
-        preferences: {
-          ...currentPreferences,
-          filters: { ...currentFilters, ...filters }
-        }
-      };
-    });
-  }, [setState]);
-
-  const filters = useMemo(() => {
-    const source = state.preferences?.filters ?? {};
-    return {
-      query: typeof source.query === 'string' ? source.query : '',
-      tags: Array.isArray(source.tags) ? source.tags : [],
-      tab: typeof source.tab === 'string' ? source.tab : 'all'
-    };
-  }, [state.preferences]);
+  // User-specific subscriptions (applications, interviews, notifications, skills)
+  useEffect(() => {
+    if (!uid) {
+      setApplicationsRaw([]);
+      setInterviewsRaw([]);
+      setNotifications([]);
+      setSkills([]);
+      return;
+    }
+    const qApps = query(collection(db, 'applications'), where('studentId', '==', uid));
+    const unsubApps = onSnapshot(qApps, snap => setApplicationsRaw(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const qInts = query(collection(db, 'interviews'), where('studentId', '==', uid));
+    const unsubInts = onSnapshot(qInts, snap => setInterviewsRaw(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubNotifications = onSnapshot(collection(db, 'users', uid, 'notifications'), snap => setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubSkills = onSnapshot(collection(db, 'users', uid, 'skills'), snap => setSkills(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => !s.deleted)));
+    return () => { unsubApps(); unsubInts(); unsubNotifications(); unsubSkills(); };
+  }, [uid]);
 
   const value = useMemo(() => ({
-    jobs: state.jobs,
+    jobs,
     applications,
     interviews,
-    skills: state.skills,
-    notifications: state.notifications,
+    skills,
+    notifications,
     filters,
     applyToJob,
     setJobStatus,
@@ -328,18 +220,20 @@ export function StudentDataProvider({ children }) {
     withdrawApplication,
     markNotificationRead,
     clearNotifications,
-    updateSkillLevel,
-    setFilters,
+  updateSkillLevel,
+  addSkill,
+  removeSkill,
+  setFilters,
     refreshProfileCompletion,
     profileCompletion,
     resetStudentData,
     applicationStages: APPLICATION_STAGES
   }), [
-    state.jobs,
+    jobs,
     applications,
     interviews,
-    state.skills,
-    state.notifications,
+    skills,
+    notifications,
     filters,
     applyToJob,
     setJobStatus,
@@ -349,8 +243,10 @@ export function StudentDataProvider({ children }) {
     withdrawApplication,
     markNotificationRead,
     clearNotifications,
-    updateSkillLevel,
-    setFilters,
+  updateSkillLevel,
+  addSkill,
+  removeSkill,
+  setFilters,
     refreshProfileCompletion,
     profileCompletion,
     resetStudentData

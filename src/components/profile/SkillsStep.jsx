@@ -20,7 +20,7 @@ function TagInput({ label, values, onChange, placeholder }) {
 }
 
 export default function SkillsStep() {
-  const { data, updateSection } = useProfileBuilder();
+  const { data, updateSection, errors } = useProfileBuilder();
   const s = data.skills;
   const set = (field) => (vals) => updateSection('skills', { ...s, [field]: vals });
   return (
@@ -28,7 +28,11 @@ export default function SkillsStep() {
       <TagInput label="Core Skills" values={s.core} onChange={set('core')} placeholder="Add a core skill" />
       <TagInput label="Tools" values={s.tools} onChange={set('tools')} placeholder="Add a tool" />
       <TagInput label="Languages" values={s.languages} onChange={set('languages')} placeholder="Add a language" />
-      <div className="muted fs-xs">Validation & suggestions TODO</div>
+      {errors.skills.length > 0 && (
+        <ul className="error-list fs-xs" aria-live="polite">
+          {errors.skills.map((e,i)=>(<li key={i}>{e}</li>))}
+        </ul>
+      )}
     </div>
   );
 }

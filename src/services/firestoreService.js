@@ -110,6 +110,30 @@ export async function upsertAdminProfile(uid, data) {
   return safeGet(ref);
 }
 
+// -------- Student Skills (subcollection users/<uid>/skills) --------
+export async function addStudentSkill(uid, skill) {
+  const ref = await addDoc(collection(db, 'users', uid, 'skills'), {
+    name: skill.name,
+    level: skill.level ?? 0,
+    goal: skill.goal ?? 5,
+    category: skill.category || 'general',
+    ...timestampFields(true)
+  });
+  return safeGet(ref);
+}
+
+export async function updateStudentSkill(uid, skillId, patch) {
+  const ref = doc(db, 'users', uid, 'skills', skillId);
+  await updateDoc(ref, { ...patch, ...timestampFields(false) });
+  return safeGet(ref);
+}
+
+export async function removeStudentSkill(uid, skillId) {
+  const ref = doc(db, 'users', uid, 'skills', skillId);
+  await updateDoc(ref, { deleted: true, ...timestampFields(false) }); // soft delete for now
+  return safeGet(ref);
+}
+
 // -------- Jobs --------
 export async function createJob(job) {
   const ref = await addDoc(collection(db, 'jobs'), { ...job, ...timestampFields(true) });
@@ -132,10 +156,24 @@ export async function createApplication(appData) {
   return safeGet(ref);
 }
 
+export async function updateApplicationStatus(applicationId, status, patch = {}) {
+  const ref = doc(db, 'applications', applicationId);
+  await updateDoc(ref, { status, ...patch, ...timestampFields(false) });
+  return safeGet(ref);
+}
+
+export async function withdrawApplication(applicationId) {
+  return updateApplicationStatus(applicationId, 'withdrawn');
+}
+
 // -------- Interviews --------
 export async function createInterview(data) {
   const ref = await addDoc(collection(db, 'interviews'), { ...data, ...timestampFields(true) });
   return safeGet(ref);
+}
+
+export async function scheduleInterview(data) {
+  return createInterview(data);
 }
 
 // -------- Assessments --------

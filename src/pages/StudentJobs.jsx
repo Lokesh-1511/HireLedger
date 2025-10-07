@@ -106,6 +106,15 @@ function StageStepper({ stages, currentIndex }) {
   );
 }
 
+function deriveCompany(job) {
+  const name = job?.company || job?.companyName || '';
+  return name;
+}
+function companyInitial(job) {
+  const name = deriveCompany(job);
+  return name ? name.charAt(0).toUpperCase() : '?';
+}
+
 function JobDetailsModal({ job, stageIndex, stages, onClose }) {
   useEffect(() => {
     if (!job) return;
@@ -125,10 +134,10 @@ function JobDetailsModal({ job, stageIndex, stages, onClose }) {
       <div className="job-modal">
         <header className="job-modal-header">
           <div className="job-modal-title">
-            <div className="job-modal-logo" aria-hidden>{job.logo || job.company[0]}</div>
+            <div className="job-modal-logo" aria-hidden>{job.logo || companyInitial(job)}</div>
             <div>
               <h2>{job.title}</h2>
-              <p className="muted">{job.company} · {job.location}</p>
+              <p className="muted">{deriveCompany(job) || 'Company'} · {job.location || '—'}</p>
             </div>
           </div>
           <button type="button" className="job-modal-close" onClick={onClose} aria-label="Close details">✕</button>
@@ -146,7 +155,7 @@ function JobDetailsModal({ job, stageIndex, stages, onClose }) {
           )}
         </section>
         <footer className="job-modal-footer">
-          <span className="muted fs-xs">Posted {job.posted} ago · {job.type}</span>
+          <span className="muted fs-xs">{job.posted ? `Posted ${job.posted} ago` : ''} {job.type ? `· ${job.type}` : ''}</span>
         </footer>
       </div>
     </div>
@@ -186,24 +195,27 @@ export default function StudentJobs() {
   }, [jobs]);
 
   const filteredJobs = useMemo(() => {
-    const normalizedQuery = filters.query.trim().toLowerCase();
+    const f = filters || { query:'', tags:[], tab:'all' };
+    const normalizedQuery = (f.query || '').trim().toLowerCase();
     return jobs.filter(job => {
       const application = applicationByJob.get(job.id);
       const isArchived = job.status === 'rejected' || job.status === 'withdrawn';
 
-      if (filters.tab === 'archived' && !isArchived) return false;
-      if (filters.tab !== 'archived' && isArchived) return false;
-      if (filters.tab === 'applied' && !application) return false;
-      if (filters.tab === 'shortlisted') {
-        if (!application || application.stageIndex < 1) return false;
+      if (f.tab === 'archived' && !isArchived) return false;
+      if (f.tab !== 'archived' && isArchived) return false;
+      if (f.tab === 'applied' && !application) return false;
+      if (f.tab === 'shortlisted') {
+        if (!application) return false;
+        const idx = applicationStages.indexOf(application.status);
+        if (idx < 1) return false;
       }
 
       if (normalizedQuery) {
-        const haystack = `${job.title} ${job.company}`.toLowerCase();
+        const haystack = `${job.title || ''} ${job.company || job.companyName || ''}`.toLowerCase();
         if (!haystack.includes(normalizedQuery)) return false;
       }
-      if (filters.tags.length) {
-        const hasAll = filters.tags.every(tag => job.tags?.includes(tag));
+      if (Array.isArray(f.tags) && f.tags.length) {
+        const hasAll = f.tags.every(tag => job.tags?.includes(tag));
         if (!hasAll) return false;
       }
       return true;
@@ -211,7 +223,13 @@ export default function StudentJobs() {
   }, [jobs, filters, applicationByJob]);
 
   const selectedJob = useMemo(() => jobs.find(job => job.id === selectedJobId) || null, [jobs, selectedJobId]);
-  const selectedStageIndex = selectedJob ? applicationByJob.get(selectedJob.id)?.stageIndex ?? null : null;
+  const selectedStageIndex = selectedJob ? (() => {
+    const app = applicationByJob.get(selectedJob.id);
+    if (!app) return null;
+    const status = app.status; // Firestore status string
+    const idx = applicationStages.indexOf(status);
+    return idx === -1 ? null : idx;
+  })() : null;
 
   function handleResetFilters() {
     setFilters({ query: '', tags: [], tab: 'all' });
@@ -224,22 +242,26 @@ export default function StudentJobs() {
       push(`Application started for ${job.title}.`, { type: 'success' });
       return;
     }
-    const isFinalStage = application.stageIndex >= applicationStages.length - 1;
-    if (isFinalStage) {
-      push(`You're already at the ${applicationStages[application.stageIndex]} stage for ${job.title}.`, { type: 'info' });
+    const currentIdx = applicationStages.indexOf(application.status);
+    if (currentIdx === -1 || currentIdx >= applicationStages.length - 1) {
+      push(`You're already at the ${application.status} stage for ${job.title}.`, { type: 'info' });
       return;
     }
-    advanceApplicationStage(job.id);
-    push(`Advanced to ${applicationStages[application.stageIndex + 1]} for ${job.title}.`, { type: 'success' });
+    // We'll pass applicationId instead of jobId now (context was updated accordingly)
+    advanceApplicationStage(application.id);
+    push(`Advanced to ${applicationStages[currentIdx + 1]} for ${job.title}.`, { type: 'success' });
   }
 
   function handleWithdraw(job) {
-    withdrawApplication(job.id);
+    const application = applicationByJob.get(job.id);
+    if (!application) return;
+    withdrawApplication(application.id);
     push(`Application withdrawn for ${job.title}.`, { type: 'warning' });
   }
 
   function handleReject(job) {
-    withdrawApplication(job.id);
+    const application = applicationByJob.get(job.id);
+    if (application) withdrawApplication(application.id);
     setJobStatus(job.id, 'rejected');
     push(`${job.title} moved to archived.`, { type: 'info' });
   }
@@ -322,11 +344,12 @@ export default function StudentJobs() {
         <ul className="job-grid" role="list">
           {filteredJobs.map(job => {
             const application = applicationByJob.get(job.id);
-            const stageLabel = application ? applicationStages[application.stageIndex] : (job.status === 'withdrawn' ? 'Withdrawn' : null);
+            const stageLabel = application ? application.status : (job.status === 'withdrawn' ? 'withdrawn' : null);
             const isRejected = job.status === 'rejected';
             const isWithdrawn = job.status === 'withdrawn';
+            const currentIdx = application ? applicationStages.indexOf(application.status) : -1;
             const primaryLabel = application
-              ? (application.stageIndex >= applicationStages.length - 1 ? 'View status' : 'Advance stage')
+              ? (currentIdx >= applicationStages.length - 1 ? 'View status' : 'Advance stage')
               : isWithdrawn ? 'Reapply'
               : isRejected ? 'Archived'
               : 'Apply now';
@@ -335,7 +358,7 @@ export default function StudentJobs() {
                 <div className="job-card-head">
                   <div className="job-card-meta">
                     <h3 className="job-title">{job.title}</h3>
-                    <p className="job-meta">{job.company} · {job.location} · {job.type}</p>
+                    <p className="job-meta">{deriveCompany(job) || 'Company'} · {job.location || '—'} · {job.type || '—'}</p>
                   </div>
                   <div className="job-card-status">
                     <StatusBadge stage={stageLabel} status={job.status} saved={job.saved} />
@@ -347,7 +370,7 @@ export default function StudentJobs() {
                   {job.tags?.map(t => <span key={t} className="tag-lite">{t}</span>)}
                 </div>
                 {application && (
-                  <StageStepper stages={applicationStages} currentIndex={application.stageIndex} />
+                  <StageStepper stages={applicationStages} currentIndex={applicationStages.indexOf(application.status)} />
                 )}
                 <div className="job-actions">
                   <button className="btn-primary" onClick={() => handlePrimary(job)} disabled={isRejected && !application} aria-disabled={isRejected && !application}>

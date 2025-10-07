@@ -3,7 +3,7 @@ import { useProfileBuilder } from '../../context/ProfileBuilderContext.jsx';
 import FileDrop from './FileDrop.jsx';
 
 export default function CertificatesStep() {
-  const { data, updateSection } = useProfileBuilder();
+  const { data, updateSection, errors } = useProfileBuilder();
   const certs = data.certificates;
   const addFiles = (files) => updateSection('certificates', [...certs, ...files.map(f=>({ file:f }))]);
   const remove = (idx) => updateSection('certificates', certs.filter((_,i)=>i!==idx));
@@ -21,7 +21,11 @@ export default function CertificatesStep() {
           );
         })}
       </ul>
-      <div className="muted fs-xs">Validation & size limits TODO</div>
+      {errors.certificates.length > 0 && (
+        <ul className="error-list fs-xs" aria-live="polite">
+          {errors.certificates.map((e,i)=>(<li key={i}>{e}</li>))}
+        </ul>
+      )}
     </div>
   );
 }

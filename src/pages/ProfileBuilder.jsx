@@ -10,14 +10,17 @@ import CertificatesStep from '../components/profile/CertificatesStep.jsx';
 import ReviewStep from '../components/profile/ReviewStep.jsx';
 
 function StepProgress() {
-  const { currentStep, goTo } = useProfileBuilder();
+  const { currentStep, goTo, hasSectionErrors } = useProfileBuilder();
   return (
     <ol className="pb-progress" aria-label="Profile completion steps">
       {steps.map((s, i) => {
         const state = i === currentStep ? 'current' : i < currentStep ? 'done' : 'upcoming';
+        const invalid = hasSectionErrors[s];
         return (
-          <li key={s} className={`pb-step ${state}`}>
-            <button type="button" onClick={() => goTo(i)} aria-current={i===currentStep ? 'step' : undefined}>{s.replace(/^[a-z]/,c=>c.toUpperCase())}</button>
+          <li key={s} className={`pb-step ${state} ${invalid ? 'error' : ''}`}>
+            <button type="button" onClick={() => goTo(i)} aria-current={i===currentStep ? 'step' : undefined} aria-invalid={invalid || undefined}>
+              {s.replace(/^[a-z]/,c=>c.toUpperCase())}{invalid && <span className="badge badge-error" title="Section has validation errors">!</span>}
+            </button>
           </li>
         );
       })}
@@ -45,13 +48,17 @@ function StepContainer() {
 }
 
 function StickyFooter() {
-  const { currentStep, next, prev, saveDraft, steps, data } = useProfileBuilder();
+  const { currentStep, next, prev, saveDraft, steps, submitProfile, submitting, validateAll, errors } = useProfileBuilder();
   const isLast = currentStep === steps.length - 1;
-  const submit = () => {
-    // TODO: Replace with real API submission
-    // Consolidated payload example below
-    console.log('SUBMIT_PROFILE_PAYLOAD', data);
-    alert('Submission placeholder. Check console for payload.');
+  const submit = async () => {
+    const res = await submitProfile();
+    if (!res.ok) {
+      // Force revalidation to surface errors on final attempt
+      validateAll();
+      alert(res.error || 'Failed to submit profile');
+    } else {
+      alert('Profile submitted successfully');
+    }
   };
   return (
     <div className="pb-footer">
@@ -61,7 +68,7 @@ function StickyFooter() {
           <button type="button" className="btn ghost" onClick={saveDraft}>Save Draft</button>
           {currentStep > 0 && <button type="button" className="btn" onClick={prev}>Back</button>}
           {!isLast && <button type="button" className="btn primary" onClick={next}>Next</button>}
-          {isLast && <button type="button" className="btn primary" onClick={submit}>Submit Profile</button>}
+          {isLast && <button type="button" className="btn primary" disabled={submitting} onClick={submit}>{submitting ? 'Submitting...' : 'Submit Profile'}</button>}
         </div>
       </div>
     </div>

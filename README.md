@@ -317,6 +317,23 @@ Two options:
 
 All seeding scripts now import the single Firestore instance (`db`) exported from `src/firebase.js` to avoid creating multiple isolated SDK instances. If you change Firebase config, update it only in that file.
 
+### Frontend Migration to Firestore Source of Truth (2025-10-08)
+The previous in-browser mock state for student and recruiter dashboards has been replaced with real-time Firestore subscriptions:
+
+- `StudentDataContext` now listens to: `jobs`, `applications (where studentId == uid)`, `interviews (where studentId == uid)`, and user-scoped `notifications` subcollection.
+- `RecruiterDataContext` now listens to: `jobs (where companyId == recruiterUid)`, `applications (where recruiterId == uid)`, `interviews (where recruiterId == uid)`, plus `verifications` and `messages` filtered by recruiter participation.
+- Application progress stages are derived from the Firestore `status` field instead of a local `stageIndex`.
+- Local mock arrays & persistent localStorage seeds were removed; only transient UI preferences (filters, skill visualization) remain locally (skills will move to Firestore in a later iteration).
+- Actions (apply, advance stage, withdraw, create job, schedule interview, message applicants) now perform Firestore writes.
+
+Pending Enhancements:
+- Saved jobs persistence (planned: `users/<uid>/savedJobs`).
+- Skill tracking & goals stored per user. (Implemented: student skills now stored in `users/<uid>/skills` with real-time subscription.)
+- Diversity and verification enrichment (currently placeholder aggregation).
+- Firestore security rules and role-based enforcement.
+
+If you previously relied on the mock data, re-run seeding scripts to populate Firestore, then authenticate and the UI will reflect live collections.
+
 ### Companies & Auth User Creation (New)
 
 Additional scripts extend the dataset beyond basic documents:
@@ -380,6 +397,21 @@ async function postJob() {
 
 ---
 Refactor completed: 2025-10-07.
+
+### Profile Builder Validation & Persistence (2025-10-08)
+The multi-step Student Profile Builder now performs client-side validation and submits to Firestore:
+- Per-section validation with inline error lists (personal, education, skills, projects, etc.).
+- Progress indicator flags steps containing errors.
+- On successful submission a consolidated `studentProfile` sub-document is upserted at `users/<uid>/studentProfile/studentProfile` using existing `upsertStudentProfile` service helper.
+- Mapping consolidates tag inputs (core/tools/languages) into a single `skills` array for the profile document.
+- Projects are normalized (name → title, description, link) and empty entries are ignored.
+- Certificates & resume remain local placeholders pending storage upload integration (future: cloud storage + URL persistence).
+
+Pending follow-ups:
+- File upload to storage & replace in-memory File objects with URLs.
+- Enforce file type & size limits.
+- Deduplicate skill tags and align with structured skills collection if introduced.
+- Mark profile completion status for dashboard display.
 
 ---
 

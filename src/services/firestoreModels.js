@@ -195,5 +195,14 @@
  *  verifiedAt?:import('firebase/firestore').Timestamp;
  * })} CompanyDoc */
 
+/** @typedef {({
+ *  name:string;
+ *  level:number; // 0-5
+ *  goal?:number; // 1-5
+ *  category?:string; // core/tool/language etc
+ *  createdAt:import('firebase/firestore').Timestamp;
+ *  updatedAt:import('firebase/firestore').Timestamp;
+ * })} StudentSkillDoc */
+
 // Exporting an empty object so file can be imported solely for types side-effect.
 export {}; 

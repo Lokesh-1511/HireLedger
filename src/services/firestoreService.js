@@ -222,4 +222,75 @@ export async function upsertAnalytics(metricId, data) {
   return safeGet(ref);
 }
 
+// -------- Role Management --------
+export async function requestRoleChange(uid, requestedRole, reason='') {
+  const ref = doc(db, 'users', uid);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('User doc missing');
+  await updateDoc(ref, { requestedRole, requestedRoleReason: reason, requestedRoleAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  return (await getDoc(ref)).data();
+}
+export async function approveRole(uid) {
+  const ref = doc(db, 'users', uid);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('User doc missing');
+  const data = snap.data();
+  if (!data.requestedRole) return data;
+  await updateDoc(ref, { role: data.requestedRole, requestedRole: null, requestedRoleReason: null, updatedAt: serverTimestamp() });
+  return (await getDoc(ref)).data();
+}
+
 export { db };
+
+// -------- Admin Helpers (Audit, Role Management Extended, Institutions) --------
+// Centralized here for reuse by AdminDataContext actions.
+
+// Audit log event writer. Consistent shape for all admin actions.
+export async function logAuditEvent({ actorId, action, resource, resourceId = null, meta = '' }) {
+  const ref = await addDoc(collection(db, 'auditLogs'), {
+    actorId: actorId || 'system',
+    action,
+    resource,
+    resourceId,
+    meta,
+    createdAt: serverTimestamp()
+  });
+  return safeGet(ref);
+}
+
+// Direct role set (admin override). Also records audit event.
+export async function setUserRole(uid, newRole, actorId) {
+  const ref = doc(db, 'users', uid);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('User doc missing');
+  await updateDoc(ref, { role: newRole, updatedAt: serverTimestamp(), requestedRole: null, requestedRoleReason: null });
+  await logAuditEvent({ actorId, action: 'assign-role', resource: 'user', resourceId: uid, meta: `role=${newRole}` });
+  return safeGet(ref);
+}
+
+export async function rejectRoleRequest(uid, actorId, reason = '') {
+  const ref = doc(db, 'users', uid);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('User doc missing');
+  const data = snap.data();
+  if (!data.requestedRole) return data;
+  await updateDoc(ref, { requestedRole: null, requestedRoleReason: null, updatedAt: serverTimestamp(), roleRequestRejectedAt: serverTimestamp(), roleRequestRejectReason: reason });
+  await logAuditEvent({ actorId, action: 'reject-user', resource: 'user', resourceId: uid, meta: reason || 'role request rejected' });
+  return (await getDoc(ref)).data();
+}
+
+export async function updateInstitutionStatus(instId, status, actorId, meta = '') {
+  const ref = doc(db, 'institutions', instId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('Institution doc missing');
+  await updateDoc(ref, { status, updatedAt: serverTimestamp() });
+  await logAuditEvent({ actorId, action: status === 'Verified' ? 'approve-institution' : status === 'Rejected' ? 'reject-institution' : 'update-institution', resource: 'institution', resourceId: instId, meta });
+  return safeGet(ref);
+}
+
+export async function createInstitutionWithAudit(data, actorId) {
+  const ref = await addDoc(collection(db, 'institutions'), { ...data, status: data.status || 'Pending', ...timestampFields(true) });
+  await logAuditEvent({ actorId, action: 'create-institution', resource: 'institution', resourceId: ref.id, meta: data.name || '' });
+  return safeGet(ref);
+}
+

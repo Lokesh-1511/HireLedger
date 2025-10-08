@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { auth, googleProvider } from '../firebase.js';
-import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
-import { ensureUser, getUser } from '../services/firestoreService.js';
+import { signInWithPopup, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { ensureUser, db } from '../services/firestoreService.js';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { assertSingleReactInstance } from '../utils/reactDiagnostics.js';
 
 const STORAGE_KEY = 'auth_session';
@@ -10,26 +11,27 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   assertSingleReactInstance(React, 'AuthProvider');
-  const [user, setUser] = useState(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const login = useCallback((email, _password, role) => {
-    if (!email || !_password || !role) return { ok: false, error: 'All fields required.' };
-    const session = { email, role, ts: Date.now() };
+  const applySession = useCallback((fbUser, firestoreUser) => {
+    if (!fbUser) { setUser(null); return; }
+    const session = {
+      email: fbUser.email,
+      role: firestoreUser.role || 'student',
+      requestedRole: firestoreUser.requestedRole || null,
+      name: firestoreUser.displayName || fbUser.displayName,
+      uid: fbUser.uid,
+      provider: fbUser.providerData?.[0]?.providerId || 'firebase',
+      ts: Date.now(),
+      firestore: firestoreUser,
+    };
     setUser(session);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    return { ok: true };
   }, []);
 
   const logout = useCallback(async () => {
-    try { await signOut(auth); } catch { /* ignore */ }
+    try { await signOut(auth); } catch {/* ignore */}
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
   }, []);
@@ -37,50 +39,60 @@ export function AuthProvider({ children }) {
   const loginWithGoogle = useCallback(async () => {
     try {
       const res = await signInWithPopup(auth, googleProvider);
-      const fbUser = res.user;
-      // ensure Firestore user document exists / updated
-      const firestoreUser = await ensureUser(fbUser);
-      const session = {
-        email: fbUser.email,
-        role: firestoreUser.role || 'student',
-        name: firestoreUser.displayName || fbUser.displayName,
-        uid: fbUser.uid,
-        provider: 'google',
-        ts: Date.now(),
-        firestore: firestoreUser,
-      };
-      setUser(session);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+      const firestoreUser = await ensureUser(res.user);
+      applySession(res.user, firestoreUser);
+      return { ok: true };
+    } catch (e) { return { ok: false, error: e.message }; }
+  }, [applySession]);
+
+  const registerEmail = useCallback(async (email, password, desiredRole='student') => {
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      let firestoreUser = await ensureUser(cred.user); // default student doc
+      // Prevent self-assignment of admin at registration time
+      const safeRole = desiredRole === 'admin' ? 'student' : desiredRole;
+      if (safeRole && safeRole !== firestoreUser.role) {
+        const ref = doc(db, 'users', cred.user.uid);
+        await updateDoc(ref, { role: safeRole, updatedAt: Date.now() });
+        const snap = await getDoc(ref);
+        firestoreUser = snap.data();
+      }
+      applySession(cred.user, firestoreUser);
+      return { ok: true };
+    } catch (e) { return { ok: false, error: e.message }; }
+  }, [applySession]);
+
+  const loginEmail = useCallback(async (email, password) => {
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const firestoreUser = await ensureUser(cred.user);
+      applySession(cred.user, firestoreUser);
+      return { ok: true };
+    } catch (e) { return { ok: false, error: e.message }; }
+  }, [applySession]);
+
+  // Explicit refresh (e.g., after requesting a role change)
+  const refreshUser = useCallback(async () => {
+    const fbUser = auth.currentUser;
+    if (!fbUser) return { ok: false, error: 'No auth user' };
+    try {
+      const ref = doc(db, 'users', fbUser.uid);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return { ok: false, error: 'User doc missing' };
+      applySession(fbUser, snap.data());
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
     }
-  }, []);
+  }, [applySession]);
 
-  // Sync firebase auth state (handles refresh / multi-tab)
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
         try {
           const firestoreUser = await ensureUser(fbUser);
-          // Preserve previously selected role if different from default
-          setUser(prev => {
-            const role = firestoreUser.role || prev?.role || 'student';
-            const session = {
-              email: fbUser.email,
-              role,
-              name: firestoreUser.displayName || fbUser.displayName,
-              uid: fbUser.uid,
-              provider: 'google',
-              ts: Date.now(),
-              firestore: firestoreUser,
-            };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-            return session;
-          });
-        } catch (e) {
-          console.error('Failed to ensure user', e);
-        }
+            applySession(fbUser, firestoreUser);
+        } catch (e) { console.error('ensureUser failed', e); }
       } else {
         setUser(null);
         localStorage.removeItem(STORAGE_KEY);
@@ -88,14 +100,22 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
     return () => unsub();
-  }, []);
+  }, [applySession]);
 
-  const value = { user, isAuthenticated: !!user, login, logout, loginWithGoogle, loading };
+  const value = {
+    user,
+    role: user?.role || 'student',
+    requestedRole: user?.requestedRole || null,
+    loading,
+    isAuthenticated: !!user,
+    logout,
+    loginWithGoogle,
+    registerEmail,
+    loginEmail,
+    refreshUser,
+  };
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
-}
+export function useAuth() { const ctx = useContext(AuthContext); if (!ctx) throw new Error('useAuth must be used within AuthProvider'); return ctx; }

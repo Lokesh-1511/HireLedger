@@ -120,18 +120,49 @@ Built a dedicated `StudentDataContext` that seeds realistic sample jobs, applica
 - Actions trigger live toasts for feedback and write through to the persistent store so both pages stay in sync on refresh.
 - Filters, saved jobs, and application stages survive reloads and are safe-guarded against malformed local storage.
 
-## Mock Authentication
-Implemented lightweight auth layer for prototyping:
-1. `AuthContext` stores `{ email, role, ts }` in `localStorage`.
-2. `AuthPage` provides split-screen marketing + form UI (email, password, role select).
-3. `ProtectedRoute` guards routes; optional `roles` prop restricts access.
-4. Role dashboards accessed via `/dashboard/:role` (student → general dashboard, recruiter → jobs, admin → candidates + placeholder admin panel).
-5. Profile dropdown (top-right) exposes Logout (clears session) and placeholder Profile link.
+## Authentication
+Authentication now exclusively uses Firebase Google Sign-In. The previous mock email/password + role selector has been removed to eliminate divergence from real identity flows.
 
-Replace with real identity provider (OAuth/OIDC, SSO, etc.) later; centralize tokens & refresh logic in context or a dedicated auth service module.
+### Current Flow
+1. User clicks "Continue with Google".
+2. On success we `ensureUser` (creates Firestore `users/<uid>` doc if missing with default `role: student`).
+3. Session persisted locally (for fast reload) but authorization decisions rely on the live Firestore doc role.
+4. `ProtectedRoute` now only trusts the in-memory Firebase-backed session (no localStorage fallback without a Firebase auth user).
 
-### Firebase Google Authentication (Added 2025-10-07)
-Firebase client SDK integrated for Google sign-in while retaining fallback demo form login.
+### Role Management
+- Default role: `student`.
+- To assign `recruiter` or `admin`, update the Firestore document `users/<uid>` manually (or via seed script / future admin UI):
+	```json
+	{
+		"role": "recruiter",
+		"companyId": "<uid or company doc id>",
+		"companyName": "Your Company Name"
+	}
+	```
+- Recruiter dashboards rely on `companyId` for primary job queries.
+
+### Role Assignment (Simplified)
+During registration the user selects a role and that role is assigned immediately to their Firestore user document (no pending workflow). Post-login role change requests can still be made via the role request panel if you keep that feature enabled.
+
+User doc fields involved:
+```json
+{
+	"role": "student",
+	"requestedRole": "recruiter",
+	"requestedRoleReason": "Need recruiter tools",
+	"requestedRoleAt": <timestamp>
+}
+```
+
+Security Note: Add Firestore security rules / admin UI before relying on this workflow in production. Without rules, any authenticated user could still attempt writes directly.
+
+### Future Enhancements
+- Admin UI for role assignment.
+- Custom claims (Firebase) to enforce role-based security rules server-side.
+- Email/password or enterprise SSO integration if required.
+
+### Firebase Google Authentication
+Firebase client SDK integrated for Google sign-in.
 
 Files:
 ```
@@ -154,14 +185,15 @@ If vars are absent, the provided demo config is used (not suitable for productio
 
 Auth flow details:
 1. User clicks Google button → `signInWithPopup`.
-2. `onAuthStateChanged` listener persists session to `localStorage` with default role `student` unless previously chosen in same tab.
-3. Logout invokes Firebase `signOut` and clears cache.
+2. `ensureUser` creates/updates Firestore user doc; role defaults to `student` if unset.
+3. Session object contains `{ uid, role, firestore }` snapshot; route protection uses this.
+4. Logout invokes Firebase `signOut` and clears session.
 
 Next recommended hardening:
-- Map Firebase custom claims → role instead of defaulting to `student`.
-- Add backend session / JWT exchange (optional) for server-side authorization.
-- Enforce allowed domains (e.g., campus email) before accepting session.
-- Implement incremental scopes if/when Drive / Storage access is required.
+- Use Firebase custom claims for authoritative role.
+- Security rules enforcing role-based read/write.
+- Domain restriction (e.g., campus email) gating sign-in.
+- Optional backend token exchange for server-side authorization.
 
 
 ## Routing & Layout Notes
@@ -333,6 +365,48 @@ Pending Enhancements:
 - Firestore security rules and role-based enforcement.
 
 If you previously relied on the mock data, re-run seeding scripts to populate Firestore, then authenticate and the UI will reflect live collections.
+
+### Recruiter Focused Permanent Seed (New)
+For a minimal, stable dataset powering recruiter dashboards without in-app mock logic, use the dedicated recruiter seed script:
+
+```
+# PowerShell or bash
+npm run seed:recruiter
+```
+
+What it ensures (idempotent where possible):
+- Recruiter user (UID: `recruiter-demo-001`) + recruiter profile sub-doc
+- Student user (UID: `student-demo-001`) + student profile for linking an application
+- Company doc (`companies/company-demo-001`)
+- Two jobs (if none exist for that recruiter):
+	- Backend Engineer Intern
+	- Frontend Engineer
+- One application tying the demo student to the Backend Intern job
+
+Rerunning will skip creating duplicate jobs/applications if jobs already exist for `companyId == recruiter-demo-001`.
+
+Usage Notes:
+- Script path: `scripts/seedRecruiterData.js`
+- Backed by the same `db` instance from `src/firebase.js`; ensure env vars are set or fallback config is acceptable.
+- Safe to run before logging in; after seeding, authenticate (Google or mock auth) and recruiter pages will subscribe to the Firestore data.
+
+Removal of In-App Seeding:
+All prior temporary demo seeding and UI buttons were removed from runtime to avoid production contamination. The external script is now the sole source for recruiter sample data.
+
+### Recruiter Job Posting (Draft vs Publish)
+The Recruiter "Post a Job" page now persists directly to Firestore:
+- Save Draft: Creates a job document with `status: 'draft'` (hidden from students)
+- Publish: Creates a job with `status: 'active'` plus a `postedAt` timestamp (immediately visible to students, who subscribe to all non-draft jobs)
+
+Implementation details:
+- Firestore write handled in `RecruiterDataContext.addJob(jobDraft, { publish })`
+- `postedAt` is only set for published jobs (serverTimestamp)
+- Student feed (`StudentDataContext`) filters out `status === 'draft'`
+
+Planned enhancements:
+- Edit existing draft → publish flow
+- Soft close (set `status: 'closed'`) with student notification fan-out
+- Rich text / markdown job descriptions with sanitization
 
 ### Companies & Auth User Creation (New)
 

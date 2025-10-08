@@ -4,7 +4,8 @@ import { db } from '../firebase.js';
 import { useAuth } from './AuthContext.jsx';
 import { withdrawApplication as withdrawApplicationSvc, updateApplicationStatus, addStudentSkill, updateStudentSkill, removeStudentSkill } from '../services/firestoreService.js';
 
-export const APPLICATION_STAGES = ['applied', 'screen', 'interview', 'offer'];
+// Unified application stage progression (recruiter advances, student views)
+export const APPLICATION_STAGES = ['applied', 'screening', 'interview', 'offer', 'hired'];
 
 // Skills now persisted in Firestore under users/<uid>/skills
 const initialSkills = [];
@@ -107,6 +108,7 @@ export function StudentDataProvider({ children }) {
       title: 'Application Started',
       message: `Application started for ${jobMap.get(jobId)?.title || 'a role'}.`,
       type: 'job',
+      senderId: uid,
       createdAt: serverTimestamp(),
       read: false
     });
@@ -216,7 +218,6 @@ export function StudentDataProvider({ children }) {
     setJobStatus,
     toggleSavedJob,
     setApplicationStage,
-    advanceApplicationStage,
     withdrawApplication,
     markNotificationRead,
     clearNotifications,
@@ -239,7 +240,6 @@ export function StudentDataProvider({ children }) {
     setJobStatus,
     toggleSavedJob,
     setApplicationStage,
-    advanceApplicationStage,
     withdrawApplication,
     markNotificationRead,
     clearNotifications,

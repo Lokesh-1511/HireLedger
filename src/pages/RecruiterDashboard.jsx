@@ -25,7 +25,7 @@ export default function RecruiterDashboard() {
         {loading && <p className="muted small">Loading recruiter data…</p>}
         {!loading && jobs.length === 0 && (
           <p className="muted small">
-            {contextInfo.mode === 'no-company-field' && 'No company assigned to your user record yet. Add a companyId to users/' }
+            {contextInfo.mode === 'no-company-field' && 'No company assigned to your user record yet. Add a companyId to users/<uid>.' }
             {contextInfo.mode === 'derived-company' && 'No jobs found for this company yet. Create your first job.'}
             {contextInfo.mode === 'meta-error' && 'Could not load company metadata.'}
             {contextInfo.mode === 'anonymous' && 'Sign in to view recruiter metrics.'}

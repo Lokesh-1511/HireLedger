@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import '../styles/pages/AdminRoles.css';
 import { AdminConsole } from '../components/layout/AdminConsole.jsx';
+import { useAdminData } from '../context/AdminDataContext.jsx';
 
 /*
   AdminRoles Page
@@ -12,36 +13,36 @@ import { AdminConsole } from '../components/layout/AdminConsole.jsx';
   TODO(SECURITY): Enforce RBAC on backend; audit all changes.
 */
 
-const USERS = Array.from({ length: 47 }).map((_, i) => ({
-  id: 'u' + (i + 1),
-  name: 'User ' + (i + 1),
-  email: `user${i+1}@example.com`,
-  role: i % 5 === 0 ? 'recruiter' : 'student',
-  pending: i % 11 === 0,
-  requestedRole: i % 11 === 0 ? 'recruiter' : null
-}));
-
 const PAGE_SIZE = 10;
 
 export default function AdminRoles() {
+  const { users, approveRole, rejectRole, assignRole, loading } = useAdminData();
   const [page, setPage] = useState(1);
   const [filterRole, setFilterRole] = useState('');
+  const enriched = useMemo(() => users.map(u => ({
+    id: u.id,
+    name: u.displayName || u.email || u.id,
+    email: u.email || '—',
+    role: u.role || 'student',
+    requestedRole: u.requestedRole || null,
+    pending: !!u.requestedRole
+  })), [users]);
 
-  const filtered = useMemo(() => USERS.filter(u => !filterRole || u.role === filterRole || (u.pending && u.requestedRole === filterRole)), [filterRole]);
+  const filtered = useMemo(() => enriched.filter(u => !filterRole || u.role === filterRole || (u.pending && u.requestedRole === filterRole)), [filterRole, enriched]);
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pageItems = filtered.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
 
   const metrics = useMemo(() => {
-    const pending = USERS.filter(u => u.pending).length;
-    const recruiters = USERS.filter(u => u.role === 'recruiter').length;
-    const students = USERS.filter(u => u.role === 'student').length;
+    const pending = enriched.filter(u => u.pending).length;
+    const recruiters = enriched.filter(u => u.role === 'recruiter').length;
+    const students = enriched.filter(u => u.role === 'student').length;
     return [
-      { label: 'Total Users', value: USERS.length, delta: '+12 new this month' },
+      { label: 'Total Users', value: enriched.length, delta: '' },
       { label: 'Pending Approvals', value: pending, delta: 'Resolve within 24h', tone: pending > 0 ? 'alert' : undefined },
-      { label: 'Active Recruiters', value: recruiters, delta: '+3 added this week', tone: 'success' },
-      { label: 'Active Students', value: students, delta: '+9 onboarding' }
+      { label: 'Active Recruiters', value: recruiters, delta: '', tone: 'success' },
+      { label: 'Active Students', value: students, delta: '' }
     ];
-  }, []);
+  }, [enriched]);
 
   const toolbar = (
     <>
@@ -56,10 +57,10 @@ export default function AdminRoles() {
     </>
   );
 
-  function approve(u) { alert('Mock approve ' + u.id); /* TODO(API) */ }
-  function reject(u) { alert('Mock reject ' + u.id); /* TODO(API) */ }
-  function assign(u, role) { alert(`Mock assign ${role} to ${u.id}`); /* TODO(API) */ }
-  function revoke(u) { alert('Mock revoke roles for ' + u.id); /* TODO(API) */ }
+  async function approve(u) { await approveRole(u.id); }
+  async function reject(u) { await rejectRole(u.id, ''); }
+  async function assign(u, role) { await assignRole(u.id, role); }
+  async function revoke(u) { await assignRole(u.id, 'student'); }
 
   return (
     <AdminConsole
@@ -80,7 +81,10 @@ export default function AdminRoles() {
             </tr>
           </thead>
           <tbody>
-            {pageItems.map(u => (
+            {loading && (
+              <tr><td colSpan={5} className="admin-empty">Loading...</td></tr>
+            )}
+            {!loading && pageItems.map(u => (
               <tr key={u.id} className={u.pending ? 'is-pending' : ''}>
                 <td data-label="Name">
                   <div className="cell-primary">{u.name}</div>
@@ -116,7 +120,7 @@ export default function AdminRoles() {
                 </td>
               </tr>
             ))}
-            {pageItems.length === 0 && (
+            {!loading && pageItems.length === 0 && (
               <tr>
                 <td colSpan={5} className="admin-empty">No users match filter.</td>
               </tr>

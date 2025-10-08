@@ -17,16 +17,21 @@ import { useToast } from '../context/ToastContext.jsx';
 const DIVERSITY_COLORS = ['#6366f1','#22c55e','#f59e0b','#64748b','#0ea5e9'];
 
 function BarChart({ data, width=480, height=180 }) {
-  const max = Math.max(...data.map(d=>d.applications));
-  const barW = (width - 40) / data.length; // 20px left padding
+  if (!data || data.length === 0) {
+    return <div className="bar-chart-empty" aria-label="No application data">No data</div>;
+  }
+  const max = Math.max(1, ...data.map(d=> (typeof d.applications === 'number' ? d.applications : 0)));
+  const barW = data.length ? (width - 40) / data.length : 0; // 20px left padding
   return (
     <svg width={width} height={height} className="bar-chart" role="img" aria-label="Applications per job">
       {data.map((d,i)=> {
-        const h = (d.applications / max) * (height - 40);
+        const apps = typeof d.applications === 'number' ? d.applications : 0;
+        const h = max === 0 ? 0 : (apps / max) * (height - 40);
+        const y = height - h - 20;
         return (
-          <g key={d.job} transform={`translate(${20 + i*barW}, ${height - h - 20})`}>
+          <g key={d.jobId || d.job || i} transform={`translate(${20 + i*barW}, ${y})`}>
             <rect width={barW * .7} height={h} rx={6} className="bar" />
-            <text x={barW*.35} y={-6} textAnchor="middle" className="bar-val">{d.applications}</text>
+            <text x={barW*.35} y={-6} textAnchor="middle" className="bar-val">{apps}</text>
             <text x={barW*.35} y={h+14} textAnchor="middle" className="bar-label">{d.job}</text>
           </g>
         );

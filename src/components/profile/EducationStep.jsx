@@ -1,5 +1,6 @@
 import React from 'react';
 import { useProfileBuilder } from '../../context/ProfileBuilderContext.jsx';
+import { YEAR_MIN, YEAR_MAX } from '../../utils/profileValidation.js';
 
 export default function EducationStep() {
   const { data, updateSection, errors, fieldErrors } = useProfileBuilder();
@@ -19,8 +20,38 @@ export default function EducationStep() {
         <label className="field-group"><span>Degree <abbr title="Required" aria-label="Required">*</abbr></span><input required name={`education-${i}-degree`} aria-required="true" aria-invalid={!!fieldErrors.education?.[i]?.degree} className={fieldErrors.education?.[i]?.degree ? 'invalid' : ''} value={ed.degree} onChange={e=>updateItem(i,{degree:e.target.value})} />{fieldErrors.education?.[i]?.degree && <div className="field-error-msg">{fieldErrors.education[i].degree}</div>}</label>
           </div>
           <div className="grid cols-3" style={{gap:'.75rem'}}>
-        <label className="field-group"><span>Start</span><input inputMode="numeric" pattern="\\d{4}" aria-invalid={!!fieldErrors.education?.[i]?.start} className={fieldErrors.education?.[i]?.start ? 'invalid' : ''} value={ed.start} onChange={e=>updateItem(i,{start:e.target.value})} placeholder="2022" />{fieldErrors.education?.[i]?.start && <div className="field-error-msg">{fieldErrors.education[i].start}</div>}</label>
-        <label className="field-group"><span>End</span><input inputMode="numeric" pattern="\\d{4}" aria-invalid={!!fieldErrors.education?.[i]?.end} className={fieldErrors.education?.[i]?.end ? 'invalid' : ''} value={ed.end} onChange={e=>updateItem(i,{end:e.target.value})} placeholder="2026" />{fieldErrors.education?.[i]?.end && <div className="field-error-msg">{fieldErrors.education[i].end}</div>}</label>
+        <label className="field-group"><span>Start</span>
+          <input
+            inputMode="numeric"
+            aria-invalid={!!fieldErrors.education?.[i]?.start}
+            className={fieldErrors.education?.[i]?.start ? 'invalid' : ''}
+            value={ed.start}
+            onChange={e=>{
+              const digits = e.target.value.replace(/[^0-9]/g,'').slice(0,4);
+              updateItem(i,{start:digits});
+            }}
+            placeholder="2023"
+            maxLength={4}
+          />
+          <small className="hint muted">YYYY ({YEAR_MIN}-{YEAR_MAX})</small>
+          {fieldErrors.education?.[i]?.start && <div className="field-error-msg">{fieldErrors.education[i].start}</div>}
+        </label>
+        <label className="field-group"><span>End</span>
+          <input
+            inputMode="numeric"
+            aria-invalid={!!fieldErrors.education?.[i]?.end}
+            className={fieldErrors.education?.[i]?.end ? 'invalid' : ''}
+            value={ed.end}
+            onChange={e=>{
+              const digits = e.target.value.replace(/[^0-9]/g,'').slice(0,4);
+              updateItem(i,{end:digits});
+            }}
+            placeholder="2027"
+            maxLength={4}
+          />
+          <small className="hint muted">YYYY ({YEAR_MIN}-{YEAR_MAX})</small>
+          {fieldErrors.education?.[i]?.end && <div className="field-error-msg">{fieldErrors.education[i].end}</div>}
+        </label>
         <label className="field-group"><span>GPA</span><input inputMode="decimal" aria-invalid={!!fieldErrors.education?.[i]?.gpa} className={fieldErrors.education?.[i]?.gpa ? 'invalid' : ''} value={ed.gpa} onChange={e=>updateItem(i,{gpa:e.target.value})} placeholder="3.8" />{fieldErrors.education?.[i]?.gpa && <div className="field-error-msg">{fieldErrors.education[i].gpa}</div>}</label>
           </div>
           <div className="actions-row">

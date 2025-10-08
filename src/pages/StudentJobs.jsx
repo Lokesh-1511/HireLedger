@@ -169,7 +169,6 @@ export default function StudentJobs() {
     filters,
     setFilters,
     applyToJob,
-    advanceApplicationStage,
     withdrawApplication,
     toggleSavedJob,
     setJobStatus,
@@ -248,8 +247,8 @@ export default function StudentJobs() {
       return;
     }
     // We'll pass applicationId instead of jobId now (context was updated accordingly)
-    advanceApplicationStage(application.id);
-    push(`Advanced to ${applicationStages[currentIdx + 1]} for ${job.title}.`, { type: 'success' });
+  // Students can no longer advance their own stage; just inform current status.
+  push(`Current stage: ${application.status} for ${job.title}. Recruiter will update further stages.`, { type: 'info' });
   }
 
   function handleWithdraw(job) {

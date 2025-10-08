@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import '../styles/pages/AdminAudit.css';
 import { AdminConsole } from '../components/layout/AdminConsole.jsx';
+import { useAdminData } from '../context/AdminDataContext.jsx';
 
 /*
   AdminAudit Page
@@ -11,35 +12,34 @@ import { AdminConsole } from '../components/layout/AdminConsole.jsx';
   TODO(SECURITY): Ensure tamper-proof log storage (append-only, hashing / chain).
 */
 
-const ACTIONS = ['login','approve-user','reject-user','create-job','update-job','delete-job','assign-role','revoke-role'];
-
-const LOGS = Array.from({ length: 120 }).map((_, i) => ({
-  id: 'log' + (i+1),
-  ts: Date.now() - i * 3600_000,
-  actor: 'user' + ((i % 15) + 1),
-  action: ACTIONS[i % ACTIONS.length],
-  resource: ['job','user','institution','credential'][i % 4],
-  meta: 'Sample metadata ' + (i+1)
-}));
+const ACTIONS = ['login','approve-user','reject-user','create-job','update-job','delete-job','assign-role','revoke-role','approve-institution','reject-institution','create-institution','update-institution'];
 
 export default function AdminAudit() {
+  const { auditLogs, loading } = useAdminData();
   const [actionFilter, setActionFilter] = useState('');
   const [resourceFilter, setResourceFilter] = useState('');
-
-  const filtered = useMemo(()=> LOGS.filter(l => (!actionFilter || l.action === actionFilter) && (!resourceFilter || l.resource === resourceFilter)), [actionFilter, resourceFilter]);
+  const normalized = useMemo(() => auditLogs.map(l => ({
+    id: l.id,
+    ts: l.createdAt?.toMillis ? l.createdAt.toMillis() : (l.createdAt?._seconds ? l.createdAt._seconds * 1000 : l.createdAt || Date.now()),
+    actor: l.actorId || l.actor || 'system',
+    action: l.action || 'unknown',
+    resource: l.resource || 'unknown',
+    meta: l.meta || ''
+  })), [auditLogs]);
+  const filtered = useMemo(()=> normalized.filter(l => (!actionFilter || l.action === actionFilter) && (!resourceFilter || l.resource === resourceFilter)), [actionFilter, resourceFilter, normalized]);
 
   const metrics = useMemo(() => {
-    const total = LOGS.length;
-    const last24 = LOGS.filter(l => l.ts >= Date.now() - 86_400_000).length;
-    const uniqueActors = new Set(LOGS.map(l => l.actor)).size;
-    const critical = LOGS.filter(l => ['delete-job','revoke-role'].includes(l.action)).length;
+    const total = normalized.length;
+    const last24 = normalized.filter(l => l.ts >= Date.now() - 86_400_000).length;
+    const uniqueActors = new Set(normalized.map(l => l.actor)).size;
+    const critical = normalized.filter(l => ['delete-job','revoke-role'].includes(l.action)).length;
     return [
       { label: 'Total Events', value: total, delta: `${last24} in last 24h` },
       { label: 'Unique Actors', value: uniqueActors, delta: 'Active user footprint' },
       { label: 'Critical Actions', value: critical, delta: 'Monitor high-risk activity', tone: critical ? 'alert' : undefined },
       { label: 'Exports', value: 'CSV', delta: 'Manual trigger' }
     ];
-  }, []);
+  }, [normalized]);
 
   const toolbar = (
     <>
@@ -65,7 +65,7 @@ export default function AdminAudit() {
   function exportCsv() {
     // Minimal mock export
     const header = 'id,timestamp,actor,action,resource,meta\n';
-    const rows = filtered.slice(0,50).map(l => `${l.id},${new Date(l.ts).toISOString()},${l.actor},${l.action},${l.resource},${l.meta}`);
+  const rows = filtered.slice(0,50).map(l => `${l.id},${new Date(l.ts).toISOString()},${l.actor},${l.action},${l.resource},${l.meta.replace(/,/g,';')}`);
     const blob = new Blob([header + rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -93,7 +93,10 @@ export default function AdminAudit() {
             </tr>
           </thead>
           <tbody>
-            {filtered.slice(0,80).map(l => (
+            {loading && (
+              <tr><td colSpan={5} className="admin-empty">Loading...</td></tr>
+            )}
+            {!loading && filtered.slice(0,80).map(l => (
               <tr key={l.id}>
                 <td data-label="Time">
                   <div className="cell-primary">{new Date(l.ts).toLocaleString()}</div>
@@ -106,7 +109,7 @@ export default function AdminAudit() {
                 <td data-label="Meta">{l.meta}</td>
               </tr>
             ))}
-            {filtered.length === 0 && (
+            {!loading && filtered.length === 0 && (
               <tr>
                 <td colSpan={5} className="admin-empty">No logs match filters.</td>
               </tr>

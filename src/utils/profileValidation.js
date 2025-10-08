@@ -1,6 +1,10 @@
 // Profile Builder Validation Utility
 // Returns detailed errors per section for display.
 
+export const YEAR_MIN = 1900;
+export const YEAR_FUTURE_ALLOWANCE = 10; // years ahead of current year
+export const YEAR_MAX = new Date().getFullYear() + YEAR_FUTURE_ALLOWANCE;
+
 /**
  * Validate the profile builder draft structure.
  * @param {object} data
@@ -29,9 +33,13 @@ export function validateProfile(data) {
       const yearRegex = /^\d{4}$/;
       if (!e.school?.trim()) { errors.education.push(`Education #${i+1}: school required`); eErr.school='Required'; }
       if (!e.degree?.trim()) { errors.education.push(`Education #${i+1}: degree required`); eErr.degree='Required'; }
-      if (e.start && !yearRegex.test(e.start)) { errors.education.push(`Education #${i+1}: start year invalid`); eErr.start='YYYY'; }
-      if (e.end && !yearRegex.test(e.end)) { errors.education.push(`Education #${i+1}: end year invalid`); eErr.end='YYYY'; }
-      if (e.start && e.end && yearRegex.test(e.start) && yearRegex.test(e.end) && Number(e.start) > Number(e.end)) { errors.education.push(`Education #${i+1}: start > end`); eErr.start='> end'; eErr.end='< start'; }
+  const currentYear = new Date().getFullYear();
+  const maxYear = currentYear + 10; // allow future graduation up to +10 years
+  const validYear = (y) => yearRegex.test(y) && Number(y) >= 1900 && Number(y) <= maxYear;
+  // Only validate once 4 digits supplied; partial input should not throw an error yet
+  if (e.start && e.start.length === 4 && !validYear(e.start)) { errors.education.push(`Education #${i+1}: start year invalid`); eErr.start='YYYY'; }
+  if (e.end && e.end.length === 4 && !validYear(e.end)) { errors.education.push(`Education #${i+1}: end year invalid`); eErr.end='YYYY'; }
+  if (e.start && e.end && e.start.length===4 && e.end.length===4 && validYear(e.start) && validYear(e.end) && Number(e.start) > Number(e.end)) { errors.education.push(`Education #${i+1}: start > end`); eErr.start='> end'; eErr.end='< start'; }
       if (e.gpa) {
         const g = Number(e.gpa);
         if (isNaN(g)) { errors.education.push(`Education #${i+1}: GPA must be numeric`); eErr.gpa='Numeric'; }

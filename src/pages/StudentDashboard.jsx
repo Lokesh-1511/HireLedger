@@ -242,17 +242,6 @@ export default function StudentDashboard() {
         </div>
       </section>
 
-      <aside className="surface notifications" aria-labelledby="notifications-heading">
-        <h3 id="notifications-heading" className="mt-0">Notifications</h3>
-        <ul className="notif-list" role="list">
-          {dashboardNotifications.length === 0 && (
-            <li className="notif" aria-label="No notifications">You're all caught up.</li>
-          )}
-          {dashboardNotifications.map(item => (
-            <li key={item.id} className={`notif ${item.type}`}>{item.text}</li>
-          ))}
-        </ul>
-      </aside>
     </div>
   );
 }

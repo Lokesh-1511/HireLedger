@@ -11,7 +11,13 @@
     "lint": "echo 'Add linter (ESLint) configuration later'",
     "seed:extended": "node scripts/seedFirestoreExtended.js",
     "seed:companies": "node scripts/seedCompanies.js",
-    "seed:auth": "node scripts/createAuthUsers.js serviceAccount.json || echo 'Provide path to service account when running manually'"
+    "seed:auth": "node scripts/createAuthUsers.js serviceAccount.json || echo 'Provide path to service account when running manually'",
+    "seed:recruiter": "node scripts/seedRecruiterData.js",
+  "seed:audit": "node scripts/seedAuditLogs.js",
+  "seed:institutions": "node scripts/seedInstitutions.js",
+  "seed:all": "npm run seed:extended && npm run seed:companies && npm run seed:recruiter && npm run seed:institutions && npm run seed:audit",
+    "verify:jobs": "node scripts/verifyJobs.js",
+    "approve:role": "node scripts/approveRole.js"
   },
   "dependencies": {
     "firebase": "^12.3.0",

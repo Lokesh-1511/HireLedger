@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import '../styles/pages/AdminInstitutions.css';
 import { AdminConsole } from '../components/layout/AdminConsole.jsx';
+import { useAdminData } from '../context/AdminDataContext.jsx';
 
 /*
   AdminInstitutions Page
@@ -11,30 +12,30 @@ import { AdminConsole } from '../components/layout/AdminConsole.jsx';
   TODO(SEARCH): Search by name or domain.
 */
 
-const INSTITUTIONS = Array.from({ length: 24 }).map((_, i) => ({
-  id: 'inst' + (i+1),
-  name: ['Tech University','Global Institute','Innovation College','Metro Campus','Central Academy'][i % 5] + ' ' + (i+1),
-  domain: 'example' + (i+1) + '.edu',
-  status: ['Pending','Verified','Rejected'][i % 3],
-  contacts: (i % 2) + 1
-}));
-
 export default function AdminInstitutions() {
+  const { institutions, updateInstitutionStatus, createInstitution, loading } = useAdminData();
   const [status, setStatus] = useState('');
-  const filtered = useMemo(()=> INSTITUTIONS.filter(i => !status || i.status === status), [status]);
+  const normalized = useMemo(() => institutions.map(i => ({
+    id: i.id,
+    name: i.name || i.displayName || 'Institution',
+    domain: i.domain || i.website || '—',
+    status: i.status || 'Pending',
+    contacts: Array.isArray(i.contacts) ? i.contacts.length : (i.contactsCount || 0)
+  })), [institutions]);
+  const filtered = useMemo(()=> normalized.filter(i => !status || i.status === status), [status, normalized]);
 
   const metrics = useMemo(() => {
-    const total = INSTITUTIONS.length;
-    const pending = INSTITUTIONS.filter(i => i.status === 'Pending').length;
-    const verified = INSTITUTIONS.filter(i => i.status === 'Verified').length;
-    const rejected = INSTITUTIONS.filter(i => i.status === 'Rejected').length;
+    const total = normalized.length;
+    const pending = normalized.filter(i => i.status === 'Pending').length;
+    const verified = normalized.filter(i => i.status === 'Verified').length;
+    const rejected = normalized.filter(i => i.status === 'Rejected').length;
     return [
       { label: 'Institutions', value: total, delta: `${verified} verified` },
       { label: 'Pending Review', value: pending, delta: 'Prioritize today', tone: pending ? 'alert' : undefined },
       { label: 'Verified Partners', value: verified, delta: '+5 this month', tone: 'success' },
       { label: 'Rejected Cases', value: rejected, delta: 'Audit quarterly' }
     ];
-  }, []);
+  }, [normalized]);
 
   const toolbar = (
     <>
@@ -46,12 +47,12 @@ export default function AdminInstitutions() {
           <option>Rejected</option>
         </select>
       </label>
-      <button type="button" className="btn-secondary" onClick={()=>alert('Mock add institution')}>Add Institution</button>
+      <button type="button" className="btn-secondary" onClick={()=>createInstitution({ name: 'New Institution', domain: 'new.edu' })}>Add Institution</button>
     </>
   );
 
-  function approve(inst) { alert('Mock approve ' + inst.id); /* TODO(API) */ }
-  function reject(inst) { alert('Mock reject ' + inst.id); /* TODO(API) */ }
+  async function approve(inst) { await updateInstitutionStatus(inst.id, 'Verified'); }
+  async function reject(inst) { await updateInstitutionStatus(inst.id, 'Rejected'); }
 
   return (
     <AdminConsole
@@ -62,7 +63,8 @@ export default function AdminInstitutions() {
     >
       <section className="admin-card" aria-label="Institutions list">
         <div className="inst-grid">
-          {filtered.map(inst => (
+          {loading && <div className="admin-empty">Loading...</div>}
+          {!loading && filtered.map(inst => (
             <article key={inst.id} className="inst-card" role="group" aria-label={inst.name}>
               <div className="inst-head-row">
                 <h2 className="inst-name">{inst.name}</h2>
@@ -79,12 +81,12 @@ export default function AdminInstitutions() {
                     <button className="btn-ghost" onClick={()=>reject(inst)}>Reject</button>
                   </>
                 )}
-                {inst.status === 'Verified' && <button className="btn-secondary" onClick={()=>alert('Mock revoke '+inst.id)}>Revoke</button>}
-                {inst.status === 'Rejected' && <button className="btn-secondary" onClick={()=>alert('Mock reopen '+inst.id)}>Reopen</button>}
+                {inst.status === 'Verified' && <button className="btn-secondary" onClick={()=>updateInstitutionStatus(inst.id,'Pending')}>Revoke</button>}
+                {inst.status === 'Rejected' && <button className="btn-secondary" onClick={()=>updateInstitutionStatus(inst.id,'Pending')}>Reopen</button>}
               </div>
             </article>
           ))}
-          {filtered.length === 0 && (
+          {!loading && filtered.length === 0 && (
             <div className="admin-empty">No institutions match filter.</div>
           )}
         </div>

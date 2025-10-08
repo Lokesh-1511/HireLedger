@@ -13,11 +13,20 @@
     "seed:companies": "node scripts/seedCompanies.js",
     "seed:auth": "node scripts/createAuthUsers.js serviceAccount.json || echo 'Provide path to service account when running manually'",
     "seed:recruiter": "node scripts/seedRecruiterData.js",
-  "seed:audit": "node scripts/seedAuditLogs.js",
-  "seed:institutions": "node scripts/seedInstitutions.js",
-  "seed:all": "npm run seed:extended && npm run seed:companies && npm run seed:recruiter && npm run seed:institutions && npm run seed:audit",
+    "seed:audit": "node scripts/seedAuditLogs.js",
+    "seed:institutions": "node scripts/seedInstitutions.js",
+    "seed:all": "npm run seed:extended && npm run seed:companies && npm run seed:recruiter && npm run seed:institutions && npm run seed:audit",
     "verify:jobs": "node scripts/verifyJobs.js",
-    "approve:role": "node scripts/approveRole.js"
+    "approve:role": "node scripts/approveRole.js",
+    "deploy": "npm run build && firebase deploy --only hosting",
+    "deploy:ci": "vite build && firebase deploy --only hosting --non-interactive",
+    "deploy:preview": "vite build && firebase hosting:channel:deploy preview-$(git rev-parse --short HEAD)",
+    "serve:hosting": "firebase emulators:start --only hosting"
+  },
+  "firebase": {
+    "hosting": {
+      "public": "dist"
+    }
   },
   "dependencies": {
     "firebase": "^12.3.0",
@@ -29,6 +38,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
     "firebase-admin": "^12.6.0",
+    "firebase-tools": "^14.19.0",
     "vite": "^5.3.1"
   }
 }

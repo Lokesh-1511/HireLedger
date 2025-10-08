@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import '../styles/pages/CredentialViewer.css';
+import useCertificateVerification from '../hooks/useCertificateVerification';
 
 /*
   CredentialViewer Page
@@ -13,12 +14,14 @@ import '../styles/pages/CredentialViewer.css';
     - TODO(SECURITY): Signed download URLs for certificate PDFs
 */
 
-const CREDS = [
-  { id: 'c1', name: 'JavaScript Fundamentals Assessment', issuer: 'HireLedger', issueDate: '2025-09-12', status: 'Verified', hash: '0xabc123...def' },
-  { id: 'c2', name: 'Data Structures Quiz', issuer: 'HireLedger', issueDate: '2025-08-03', status: 'Pending', hash: null },
-  { id: 'c3', name: 'SQL Mastery Badge', issuer: 'HireLedger', issueDate: '2025-07-21', status: 'Verified', hash: '0x9e88ff...34b' },
-  { id: 'c4', name: 'Frontend Performance Evaluation', issuer: 'HireLedger', issueDate: '2025-06-30', status: 'Verified', hash: '0x44ad88...91e' },
-];
+// The initial list loads via the blockchain adapter (placeholder dataset).
+// Later, this can merge with Firestore metadata if needed.
+
+function deriveStatus(c) {
+  if (c.revoked) return 'Revoked';
+  if (c.verified) return 'Verified';
+  return 'Pending';
+}
 
 function Status({ status }) {
   const color = status === 'Verified' ? 'var(--success-500, #16a34a)' : 'var(--warn-500, #d97706)';
@@ -26,6 +29,11 @@ function Status({ status }) {
 }
 
 export default function CredentialViewer() {
+  const learnerId = 'currentUser'; // TODO: replace with real auth uid
+  const { credentials, loading, error, verify, refreshList } = useCertificateVerification();
+
+  useEffect(() => { refreshList(learnerId); }, [learnerId, refreshList]);
+
   return (
     <div className="credential-page">
       <header className="cred-head">
@@ -44,28 +52,41 @@ export default function CredentialViewer() {
             </tr>
           </thead>
           <tbody>
-            {CREDS.map(c => (
-              <tr key={c.id}>
-                <td data-label="Name">{c.name}</td>
-                <td data-label="Issuer">{c.issuer}</td>
-                <td data-label="Issued">{c.issueDate}</td>
-                <td data-label="Status"><Status status={c.status} /></td>
-                <td data-label="Action">
-                  <div className="cred-actions">
-                    {c.hash && <button className="btn-ghost" onClick={()=>alert('TODO: open blockchain explorer '+c.hash)}>Verify</button>}
-                    <button className="btn-secondary" onClick={()=>alert('TODO: download credential PDF')}>Download</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {credentials.map(c => {
+              const status = deriveStatus(c);
+              return (
+                <tr key={c.id}>
+                  <td data-label="Name">{c.title || c.name}</td>
+                  <td data-label="Issuer">{c.issuer || 'HireLedger'}</td>
+                  <td data-label="Issued">{c.issuedAt ? new Date(c.issuedAt).toLocaleDateString() : '—'}</td>
+                  <td data-label="Status"><Status status={status} /></td>
+                  <td data-label="Action">
+                    <div className="cred-actions">
+                      {status !== 'Verified' && !c.revoked && (
+                        <button
+                          className="btn-ghost"
+                          disabled={loading}
+                          onClick={() => verify({ credentialId: c.id, payload: { learnerId } })}
+                        >
+                          {loading ? 'Verifying...' : 'Verify'}
+                        </button>
+                      )}
+                      <button className="btn-secondary" onClick={()=>alert('TODO: download credential PDF')}>Download</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
-        {CREDS.length === 0 && (
+        {credentials.length === 0 && !loading && (
           <div className="empty-state">
             <p>No credentials yet.</p>
             <button className="btn-primary" onClick={()=>alert('Take an assessment first!')}>Take Assessment</button>
           </div>
         )}
+        {loading && <p style={{padding:'1rem'}}>Loading credentials...</p>}
+        {error && <p style={{padding:'1rem', color:'var(--error-600,#dc2626)'}}>Error loading credentials: {String(error.message || error)}</p>}
       </div>
     </div>
   );
